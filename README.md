@@ -13,6 +13,7 @@ go version
 ```
 
 ### Ego
+Install Ego: [Ego](https://docs.edgeless.systems/ego/getting-started/install)
 
 ```bash
 sudo snap install ego-dev --classic
