@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
@@ -14,6 +15,17 @@ import (
 func handler(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 
+	query := r.URL.Query()
+	fmt.Println(query)
+	//cmd := query.Get("cmd")
+	value1, err := strconv.Atoi(query.Get("val1"))
+	//value2 := query.Get("val2")
+	value2, err := strconv.Atoi(query.Get("val2"))
+
+	/* 	fmt.Println(cmd)
+	   	fmt.Println(value1)
+	   	fmt.Println(value2)
+	*/
 	r.ParseMultipartForm(32 << 20) // limit your max input length!
 	var buf bytes.Buffer
 	// in your case file would be fileupload
@@ -36,7 +48,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	wasmBytes := buf.Bytes()
 
-	err = useWasmFunction(wasmBytes)
+	err = useWasmFunction(wasmBytes, value1, value2)
 
 	if err != nil {
 		fmt.Fprint(w, err)
@@ -45,7 +57,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	//fmt.Println(contents)
 }
 
-func useWasmFunction(wasmBytes []byte) error {
+func useWasmFunction(wasmBytes []byte, value1 int, value2 int) error {
 	engine := wasmer.NewEngine()
 	store := wasmer.NewStore(engine)
 
@@ -70,7 +82,7 @@ func useWasmFunction(wasmBytes []byte) error {
 	}
 	// Calls that exported function with Go standard values. The WebAssembly
 	// types are inferred and values are casted automatically.
-	result, _ := sum(5, 37)
+	result, _ := sum(value1, value2)
 
 	fmt.Println(result) // 42!
 	return nil
