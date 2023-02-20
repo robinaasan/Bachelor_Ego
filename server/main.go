@@ -4,65 +4,124 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
+	enclave "github.com/edgelesssys/ego/enclave"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
+type WasmFile struct {
+	fileBytes []byte
+}
+
+type Storage struct {
+	number int32
+}
+
+func newWasmFile() *WasmFile {
+	return &WasmFile{
+		fileBytes: []byte{},
+	}
+}
+
+func newStorage() *Storage {
+	return &Storage{
+		number: 0,
+	}
+}
+
+var wasm_file = newWasmFile()
+var storage = newStorage()
+
+func handlerAdd(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 
+	if len(wasm_file.fileBytes) == 0 {
+		fmt.Fprintf(w, "There is no wasm file here!")
+		return
+	}
 	query := r.URL.Query()
 	fmt.Println(query)
 	//cmd := query.Get("cmd")
-	value1, err := strconv.Atoi(query.Get("val1"))
-	//value2 := query.Get("val2")
-	value2, err := strconv.Atoi(query.Get("val2"))
+	var query_key_val1, query_key_val2 int
+
+	query_key_val1, err := strconv.Atoi(query.Get("val1"))
+
+	if err != nil {
+		//he is probably uploading a file
+		//fmt.Fprint(w, err)
+	}
+	query_key_val2, err = strconv.Atoi(query.Get("val2"))
+	if err != nil {
+		fmt.Fprint(w, err)
+	}
+	err = useWasmFunction(wasm_file, query_key_val1, query_key_val2)
+
+	if err != nil {
+		fmt.Println(err)
+		fmt.Fprintln(w, err)
+	}
+	// value1, err := strconv.Atoi(query.Get("val1"))
+	// //value2 := query.Get("val2")
+	// value2, err := strconv.Atoi(query.Get("val2"))
 
 	/* 	fmt.Println(cmd)
 	   	fmt.Println(value1)
 	   	fmt.Println(value2)
 	*/
+	//contents := buf.String()
+	//fmt.Println(contents)
+
+}
+
+func getWasmFile(r *http.Request) error {
+
 	r.ParseMultipartForm(32 << 20) // limit your max input length!
 	var buf bytes.Buffer
 	// in your case file would be fileupload
 	file, header, err := r.FormFile("file")
+
 	if err != nil {
-		panic(err)
+		return fmt.Errorf(err.Error())
+
+		//panic(err)
 	}
+
 	defer file.Close()
 	name_type := strings.Split(header.Filename, ".")
 
 	if name_type[1] == "wasm" {
 		fmt.Println("Correct file type!")
 	} else {
-		fmt.Fprintf(w, "Wanted file type: txt and got filetype: %v", name_type[1])
-		os.Exit(1)
+		return fmt.Errorf("Wanted file type: txt and got filetype: %v", name_type[1])
+
+		//os.Exit(1)
 	}
 
 	fmt.Printf("Filename: %v\n", name_type[0])
 	io.Copy(&buf, file)
 
-	wasmBytes := buf.Bytes()
+	//	wasmBytes :=
 
-	err = useWasmFunction(wasmBytes, value1, value2)
+	wasm_file.fileBytes = buf.Bytes()
 
-	if err != nil {
-		fmt.Fprint(w, err)
-	}
-	//contents := buf.String()
-	//fmt.Println(contents)
+	return nil
+
+	// if err != nil {
+	// 	fmt.Errorf(err.Error())
+	// }
 }
 
-func useWasmFunction(wasmBytes []byte, value1 int, value2 int) error {
+func useWasmFunction(wasm_file *WasmFile, value1 int, value2 int) error {
+	fmt.Println("Function runs:)")
 	engine := wasmer.NewEngine()
 	store := wasmer.NewStore(engine)
 
 	// Compiles the module
-	module, err := wasmer.NewModule(store, wasmBytes)
+	module, err := wasmer.NewModule(store, wasm_file.fileBytes)
 
 	if err != nil {
 		return fmt.Errorf("Failed to compile module Error:\n%v", err)
@@ -84,11 +143,47 @@ func useWasmFunction(wasmBytes []byte, value1 int, value2 int) error {
 	// types are inferred and values are casted automatically.
 	result, _ := sum(value1, value2)
 
-	fmt.Println(result) // 42!
+	storage.number += result.(int32)
+	//storage.number = storage.number + result
+	fmt.Println("running storage..")
+	fmt.Println(storage.number) // 42!
 	return nil
 }
 
+func handlerUpload(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	fmt.Println(query)
+
+	//_, err := strconv.Atoi(query.Get("filename"))
+	// if err != nil {
+	// 	fmt.Fprint(w, err)
+	// }
+
+	err := getWasmFile(r)
+
+	if err != nil {
+		fmt.Fprint(w, err)
+	}
+}
+
 func main() {
-	http.HandleFunc("/", handler)
-	http.ListenAndServe(":8080", nil)
+
+	mux := http.NewServeMux()
+	
+	mux.HandleFunc("/Add", handlerAdd)
+	mux.HandleFunc("/Upload", handlerUpload)
+	
+	
+
+	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	server := http.Server{Addr: ":8080", TLSConfig: tlsConfig}
+
+
+	server.ListenAndServeTLS("", "")
+	server.
+	//http.ListenAndServe(":8080", nil)
+
 }

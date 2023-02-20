@@ -1,0 +1,4 @@
+server/enclave.json
+server/private.pem
+server/public.pem
+server/server
