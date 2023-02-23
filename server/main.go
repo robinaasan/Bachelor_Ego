@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
-	enclave "github.com/edgelesssys/ego/enclave"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
@@ -169,21 +167,18 @@ func handlerUpload(w http.ResponseWriter, r *http.Request) {
 func main() {
 
 	mux := http.NewServeMux()
-	
+
 	mux.HandleFunc("/Add", handlerAdd)
 	mux.HandleFunc("/Upload", handlerUpload)
-	
-	
 
-	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	server := http.Server{Addr: ":8080", TLSConfig: tlsConfig}
-
+	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	//	server := http.Server{Addr: ":8080", TLSConfig: tlsConfig}
+	server := http.Server{Addr: ":8080"}
 
 	server.ListenAndServeTLS("", "")
-	server.
 	//http.ListenAndServe(":8080", nil)
 
 }
