@@ -2,13 +2,11 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
-	"os"
 )
 
 const usage_add string = "Usage: client <cmd> <key> <value>"
@@ -57,7 +55,7 @@ func runTerminalCommands(client *Client) error {
 
 	q := url.Values{}
 
-	if len(args) < 2 {
+	if len(args) < 1 {
 		panic(usage_add)
 		// } else { // bare for å sjekke
 		// 	fmt.Printf(args[0])
@@ -81,13 +79,13 @@ func runTerminalCommands(client *Client) error {
 		//run function that calls one endpoint
 
 	case "upload":
-		if len(args) < 2 {
+		if len(args) < 1 {
 			panic(usage_upload)
 		}
 		q.Add("cmd", "upload")
-		q.Add("filename", args[1])
+		//q.Add("filename", args[1])
 
-		err := postUploadFile(args[1], q, client)
+		err := postUploadFile(q, client)
 		if err != nil {
 			return err
 		}
@@ -129,41 +127,60 @@ func getAdd(q url.Values, client *Client) error {
 	return nil
 }
 
-func postUploadFile(filepath string, q url.Values, client *Client) error {
 
-	file, err := os.Open(filepath)
-	if err != nil {
-		return err
-	}
+func postUploadFile(q url.Values, client *Client) error {
+	wasmBytes := []byte(`
+	(module
+	  (type (func (param i32 i32) (result i32)))
+	  (func (type 0)
+	    local.get 0
+	    local.get 1
+	    i32.add)
+	  (export "sum" (func 0)))
+`)
+	wasmMap := map[string][]byte{"File": wasmBytes}
+	json_data, err := json.Marshal(wasmMap)
+		
 
-	defer file.Close()
+	//file, err := os.Open(filepath)
+	// if err != nil {
+	// 	return err
+	// }
 
-	b := &bytes.Buffer{}
+	//defer file.Close()
 
-	writer := multipart.NewWriter(b)
+	//b := &bytes.Buffer{}
 
-	part, err := writer.CreateFormFile("file", filepath)
+	//writer := multipart.NewWriter(b)
 
-	if err != nil {
-		return err
-	}
+	//part, err := writer.CreateFormFile("file", filepath)
 
-	_, err = io.Copy(part, file)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if err != nil {
-		return err
-	}
+	// _, err = io.Copy(part, file)
 
-	err = writer.Close()
+	// if err != nil {
+	// 	return err
+	// }
 
-	if err != nil {
-		return err
-	}
+	// err = writer.Close()
 
-	req, err := http.NewRequest("POST", uploadEndPoint, b)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if err != nil {
+	// 	return err
+	// }
+	req, err := http.NewRequest("POST", uploadEndPoint, bytes.NewBuffer(json_data))
 	//req.RawQuery = q.Encode()
+	if err != nil {
+		return err
+	}
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Content-Type", "application/json")
 
 	//client := &http.Client{}
 	resp, err := client.c.Do(req)

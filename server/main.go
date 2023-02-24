@@ -1,18 +1,17 @@
 package main
 
 import (
-	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
-	"strings"
 
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
 type WasmFile struct {
-	fileBytes []byte
+	File []byte
 }
 
 type Storage struct {
@@ -21,7 +20,7 @@ type Storage struct {
 
 func newWasmFile() *WasmFile {
 	return &WasmFile{
-		fileBytes: []byte{},
+		File: []byte{},
 	}
 }
 
@@ -37,20 +36,31 @@ var storage = newStorage()
 func handlerAdd(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 
-	if len(wasm_file.fileBytes) == 0 {
-		fmt.Fprintf(w, "There is no wasm file here!")
-		return
-	}
+	// if len(wasm_file.fileBytes) == 0 {
+	// 	fmt.Fprintf(w, "There is no wasm file here!")
+	// 	return
+	// }
+	
 	query := r.URL.Query()
+	
+	command := query.Get("cmd")
+	if command == "add" {
+		//Add the numbers
+	}else if command == "upload"{
+		//upload the stuff	
+	}else {
+		fmt.Fprint(w, errors.New("Error: No parameter included"))		
+		
+	}
 	fmt.Println(query)
 	//cmd := query.Get("cmd")
 	var query_key_val1, query_key_val2 int
-
+	
 	query_key_val1, err := strconv.Atoi(query.Get("val1"))
 
 	if err != nil {
 		//he is probably uploading a file
-		//fmt.Fprint(w, err)
+		fmt.Fprint(w, err)
 	}
 	query_key_val2, err = strconv.Atoi(query.Get("val2"))
 	if err != nil {
@@ -77,34 +87,50 @@ func handlerAdd(w http.ResponseWriter, r *http.Request) {
 
 func getWasmFile(r *http.Request) error {
 
-	r.ParseMultipartForm(32 << 20) // limit your max input length!
-	var buf bytes.Buffer
+	//r.ParseMultipartForm(32 << 20) // limit your max input length!
+	//var buf bytes.Buffer
 	// in your case file would be fileupload
-	file, header, err := r.FormFile("file")
+	//file, header, err := r.FormFile("file")
+	// decoder := json.NewDecoder(r.Body)
+
+	// err := decoder.Decode(&wasm_file)
+	//body, err := ioutil.ReadAll(r.Body)
+	// if err != nil {
+	// 	return err
+	// }
+
+	err := json.NewDecoder(r.Body).Decode(&wasm_file)
 
 	if err != nil {
-		return fmt.Errorf(err.Error())
-
-		//panic(err)
+		return err
 	}
 
-	defer file.Close()
-	name_type := strings.Split(header.Filename, ".")
+	fmt.Printf("Json: %v", wasm_file.File)
 
-	if name_type[1] == "wasm" {
-		fmt.Println("Correct file type!")
-	} else {
-		return fmt.Errorf("Wanted file type: txt and got filetype: %v", name_type[1])
+	// if err != nil {
 
-		//os.Exit(1)
-	}
+	// 	return fmt.Errorf(err.Error())
 
-	fmt.Printf("Filename: %v\n", name_type[0])
-	io.Copy(&buf, file)
+	// 	//panic(err)
+	// }
+
+	//defer file.Close()
+	// name_type := strings.Split(header.Filename, ".")
+
+	// if name_type[1] == "wasm" {
+	// 	fmt.Println("Correct file type!")
+	// } else {
+	// 	return fmt.Errorf("Wanted file type: txt and got filetype: %v", name_type[1])
+
+	// 	//os.Exit(1)
+	// }
+
+	// fmt.Printf("Filename: %v\n", name_type[0])
+	// io.Copy(&buf, file)
 
 	//	wasmBytes :=
 
-	wasm_file.fileBytes = buf.Bytes()
+	//wasm_file.fileBytes = buf.Bytes()
 
 	return nil
 
@@ -119,7 +145,7 @@ func useWasmFunction(wasm_file *WasmFile, value1 int, value2 int) error {
 	store := wasmer.NewStore(engine)
 
 	// Compiles the module
-	module, err := wasmer.NewModule(store, wasm_file.fileBytes)
+	module, err := wasmer.NewModule(store, wasm_file.File)
 
 	if err != nil {
 		return fmt.Errorf("Failed to compile module Error:\n%v", err)
@@ -145,6 +171,7 @@ func useWasmFunction(wasm_file *WasmFile, value1 int, value2 int) error {
 	//storage.number = storage.number + result
 	fmt.Println("running storage..")
 	fmt.Println(storage.number) // 42!
+
 	return nil
 }
 
@@ -166,19 +193,22 @@ func handlerUpload(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	mux := http.NewServeMux()
+	//mux := http.NewServeMux()
 
-	mux.HandleFunc("/Add", handlerAdd)
-	mux.HandleFunc("/Upload", handlerUpload)
+	http.HandleFunc("/Add", handlerAdd)
+	http.HandleFunc("/Upload", handlerUpload)
 
 	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
 	//	server := http.Server{Addr: ":8080", TLSConfig: tlsConfig}
-	server := http.Server{Addr: ":8080"}
+	http.ListenAndServe(":8080", nil)
+	// debug.PrintStack()
 
-	server.ListenAndServeTLS("", "")
+	// server.ListenAndServeTLS("", "")
+	//server.ListenAndServe()
+
 	//http.ListenAndServe(":8080", nil)
 
 }
