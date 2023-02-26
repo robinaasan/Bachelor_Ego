@@ -127,20 +127,20 @@ func getAdd(q url.Values, client *Client) error {
 	return nil
 }
 
-
 func postUploadFile(q url.Values, client *Client) error {
 	wasmBytes := []byte(`
 	(module
-	  (type (func (param i32 i32) (result i32)))
-	  (func (type 0)
-	    local.get 0
-	    local.get 1
-	    i32.add)
-	  (export "sum" (func 0)))
+		;; We import a math.sum function.
+		(import "math" "sum" (func $sum (param i32 i32) (result i32)))
+
+		;; We export an add_one function.
+		(func (export "add_one") (param $x i32) (result i32)
+			local.get $x
+			i32.const 1
+			call $sum))
 `)
 	wasmMap := map[string][]byte{"File": wasmBytes}
 	json_data, err := json.Marshal(wasmMap)
-		
 
 	//file, err := os.Open(filepath)
 	// if err != nil {

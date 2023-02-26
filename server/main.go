@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/robinaasan/Bachelor_Ego/server/wasmcounter"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
@@ -24,14 +25,15 @@ func newWasmFile() *WasmFile {
 	}
 }
 
-func newStorage() *Storage {
-	return &Storage{
-		number: 0,
-	}
-}
+// func newStorage() *Storage {
+// 	return &Storage{
+// 		number: 0,
+// 	}
+// }
 
 var wasm_file = newWasmFile()
-var storage = newStorage()
+
+//var storage = newStorage()
 
 func handlerAdd(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
@@ -105,7 +107,7 @@ func getWasmFile(r *http.Request) error {
 		return err
 	}
 
-	fmt.Printf("Json: %v", wasm_file.File)
+	fmt.Printf("Json: %v", string(wasm_file.File))
 
 	// if err != nil {
 
@@ -145,32 +147,20 @@ func useWasmFunction(wasm_file *WasmFile, value1 int, value2 int) error {
 	store := wasmer.NewStore(engine)
 
 	// Compiles the module
-	module, err := wasmer.NewModule(store, wasm_file.File)
-
+	instance, err := wasmcounter.GetNewWasmInstace(engine, store, 42, wasm_file.File)
+	
 	if err != nil {
-		return fmt.Errorf("Failed to compile module Error:\n%v", err)
+		return err
 	}
-	// Instantiates the module
-	importObject := wasmer.NewImportObject()
-	instance, err := wasmer.NewInstance(module, importObject)
+	
+	addOne, _ := instance.Exports.GetRawFunction("add_one")
 
-	if err != nil {
-		return fmt.Errorf("Failed to instaciate module Error:\n%v", err)
-	}
-	// Gets the `sum` exported function from the WebAssembly instance.
-	sum, err := instance.Exports.GetFunction("sum")
+	fmt.Println(addOne.Type())
+	//fmt.Println(addOne.ParameterArity())
+	//fmt.Println(addOne.ResultArity())
+	result, _ := addOne.Call(41)
 
-	if err != nil {
-		return fmt.Errorf("Failed to get function from module Error:\n%v", err)
-	}
-	// Calls that exported function with Go standard values. The WebAssembly
-	// types are inferred and values are casted automatically.
-	result, _ := sum(value1, value2)
-
-	storage.number += result.(int32)
-	//storage.number = storage.number + result
-	fmt.Println("running storage..")
-	fmt.Println(storage.number) // 42!
+	fmt.Println(result)
 
 	return nil
 }

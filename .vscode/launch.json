@@ -11,7 +11,7 @@
                 "arg1",
                 "arg2"
             ],
-            "cwd": "${TestBachelor/server}",
+            "cwd": "${workspaceFolder}",
             "environment": [
                 {
                     "name": "LD_LIBRARY_PATH",

@@ -1,4 +1,4 @@
-module wasm_test
+module github.com/robinaasan/Bachelor_Ego
 
 go 1.18
 
