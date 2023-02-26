@@ -40,22 +40,22 @@ func handlerAdd(w http.ResponseWriter, r *http.Request) {
 	// 	fmt.Fprintf(w, "There is no wasm file here!")
 	// 	return
 	// }
-	
+
 	query := r.URL.Query()
-	
+
 	command := query.Get("cmd")
 	if command == "add" {
 		//Add the numbers
-	}else if command == "upload"{
-		//upload the stuff	
-	}else {
-		fmt.Fprint(w, errors.New("Error: No parameter included"))		
-		
+	} else if command == "upload" {
+		//upload the stuff
+	} else {
+		fmt.Fprint(w, errors.New("Error: No parameter included"))
+
 	}
 	fmt.Println(query)
 	//cmd := query.Get("cmd")
 	var query_key_val1, query_key_val2 int
-	
+
 	query_key_val1, err := strconv.Atoi(query.Get("val1"))
 
 	if err != nil {

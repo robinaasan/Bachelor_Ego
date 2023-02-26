@@ -1,11 +1,35 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configuration": [
+    "configurations": [
         {
-        "program": "${server}",
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/snap/ego-dev/current/opt/ego/bin/ego-host",
+            "args": [
+                "/snap/ego-dev/current/opt/ego/share/ego-enclave:server/server",
+                "arg1",
+                "arg2"
+            ],
+            "cwd": "${TestBachelor/server}",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/snap/ego-dev/current/usr/lib/x86_64-linux-gnu"
+                }
+            ],
+            "MIMode": "gdb",
+            "miDebuggerPath": "/snap/ego-dev/current/opt/ego/bin/ego-gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "text": "handle SIGILL nostop"
+                }
+            ]
         }
     ]
 }
