@@ -188,10 +188,13 @@ func main() {
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
-	//	server := http.Server{Addr: ":8080", TLSConfig: tlsConfig}
-	
-	http.ListenAndServe(":8080", nil)
-	
+	server := http.Server{Addr: ":8080"}
+	fmt.Println("Listening...")
+	err := server.ListenAndServe()
+
+	fmt.Println(err)
+	//http.ListenAndServe(":8080", nil)
+
 	// debug.PrintStack()
 
 	// server.ListenAndServeTLS("", "")
