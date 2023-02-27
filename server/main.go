@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,23 +14,14 @@ type WasmFile struct {
 	File []byte
 }
 
-type Storage struct {
-	number int32
-}
-
 func newWasmFile() *WasmFile {
 	return &WasmFile{
 		File: []byte{},
 	}
 }
 
-// func newStorage() *Storage {
-// 	return &Storage{
-// 		number: 0,
-// 	}
-// }
-
 var wasm_file = newWasmFile()
+var env = wasmcounter.MyEnvironment{Shift: int32(0)}
 
 //var storage = newStorage()
 
@@ -45,18 +35,18 @@ func handlerAdd(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query()
 
-	command := query.Get("cmd")
-	if command == "add" {
-		//Add the numbers
-	} else if command == "upload" {
-		//upload the stuff
-	} else {
-		fmt.Fprint(w, errors.New("Error: No parameter included"))
+	//command := query.Get("cmd")
+	// if command == "add" {
+	// 	//Add the numbers
+	// } else if command == "upload" {
+	// 	//upload the stuff
+	// } else {
+	// 	fmt.Fprint(w, errors.New("Error: No parameter included"))
 
-	}
+	// }
 	fmt.Println(query)
 	//cmd := query.Get("cmd")
-	var query_key_val1, query_key_val2 int
+	var query_key_val1 int
 
 	query_key_val1, err := strconv.Atoi(query.Get("val1"))
 
@@ -64,26 +54,12 @@ func handlerAdd(w http.ResponseWriter, r *http.Request) {
 		//he is probably uploading a file
 		fmt.Fprint(w, err)
 	}
-	query_key_val2, err = strconv.Atoi(query.Get("val2"))
-	if err != nil {
-		fmt.Fprint(w, err)
-	}
-	err = useWasmFunction(wasm_file, query_key_val1, query_key_val2)
+	err = useWasmFunction(wasm_file, query_key_val1)
 
 	if err != nil {
 		fmt.Println(err)
 		fmt.Fprintln(w, err)
 	}
-	// value1, err := strconv.Atoi(query.Get("val1"))
-	// //value2 := query.Get("val2")
-	// value2, err := strconv.Atoi(query.Get("val2"))
-
-	/* 	fmt.Println(cmd)
-	   	fmt.Println(value1)
-	   	fmt.Println(value2)
-	*/
-	//contents := buf.String()
-	//fmt.Println(contents)
 
 }
 
@@ -141,59 +117,81 @@ func getWasmFile(r *http.Request) error {
 	// }
 }
 
-func useWasmFunction(wasm_file *WasmFile, value1 int, value2 int) error {
-	fmt.Println("Function runs:)")
+func useWasmFunction(wasm_file *WasmFile, value1 int) error {
+
 	engine := wasmer.NewEngine()
 	store := wasmer.NewStore(engine)
 
 	// Compiles the module
-	instance, err := wasmcounter.GetNewWasmInstace(engine, store, 42, wasm_file.File)
-	
+	instance, err := wasmcounter.GetNewWasmInstace(&env, engine, store, wasm_file.File)
+
 	if err != nil {
 		return err
 	}
-	
-	addOne, _ := instance.Exports.GetRawFunction("add_one")
+
+	addOne, err := instance.Exports.GetRawFunction("add_one")
+
+	if err != nil {
+		return err
+	}
 
 	fmt.Println(addOne.Type())
 	//fmt.Println(addOne.ParameterArity())
 	//fmt.Println(addOne.ResultArity())
-	result, _ := addOne.Call(41)
+	result, err := addOne.Call(value1)
 
-	fmt.Println(result)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Returned: %v, Shift value: %v\n", result, env.Shift)
 
 	return nil
 }
 
-func handlerUpload(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	fmt.Println(query)
+// func handlerUpload(w http.ResponseWriter, r *http.Request) {
+// 	query := r.URL.Query()
+// 	fmt.Println(query)
 
-	//_, err := strconv.Atoi(query.Get("filename"))
-	// if err != nil {
-	// 	fmt.Fprint(w, err)
-	// }
+// 	//_, err := strconv.Atoi(query.Get("filename"))
+// 	// if err != nil {
+// 	// 	fmt.Fprint(w, err)
+// 	// }
 
-	err := getWasmFile(r)
+// 	err := getWasmFile(r)
 
-	if err != nil {
-		fmt.Fprint(w, err)
-	}
-}
+// 	if err != nil {
+// 		fmt.Fprint(w, err)
+// 	}
+// }
 
 func main() {
 
 	//mux := http.NewServeMux()
 
+	wasm_file.File = []byte(`
+	(module
+		;; We import a math.sum function.
+		(import "math" "sum" (func $sum (param i32 i32) (result i32)))
+
+		;; We export an add_one function.
+		(func (export "add_one") (param $x i32) (result i32)
+			local.get $x
+			i32.const 1
+			call $sum))
+	`)
+
 	http.HandleFunc("/Add", handlerAdd)
-	http.HandleFunc("/Upload", handlerUpload)
+	//.HandleFunc("/Upload", handlerUpload)
 
 	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
 	//	server := http.Server{Addr: ":8080", TLSConfig: tlsConfig}
+	
 	http.ListenAndServe(":8080", nil)
+	
 	// debug.PrintStack()
 
 	// server.ListenAndServeTLS("", "")

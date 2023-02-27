@@ -64,12 +64,12 @@ func runTerminalCommands(client *Client) error {
 
 	switch args[0] {
 	case "add":
-		if len(args) < 3 {
+		if len(args) < 2 {
 			panic(usage_add)
 		}
 		q.Add("cmd", "add")
 		q.Add("val1", args[1])
-		q.Add("val2", args[2])
+		//	q.Add("val2", args[2])
 
 		err := getAdd(q, client)
 
@@ -92,9 +92,8 @@ func runTerminalCommands(client *Client) error {
 
 		//run function that calls the other one
 	default: // optimalt panic(usage)
-		q.Add("cmd", "noe")
+		q.Add("cmd", "add")
 		q.Add("val1", args[1])
-		q.Add("val2", args[2])
 
 	}
 
@@ -189,7 +188,7 @@ func postUploadFile(q url.Values, client *Client) error {
 	}
 
 	//response from server:
-	bs := make([]byte, 99999)
+	bs := make([]byte, 512)
 	resp.Body.Read(bs)
 	fmt.Printf("%v\n", string(bs))
 

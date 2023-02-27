@@ -5,21 +5,17 @@ import (
 )
 
 type MyEnvironment struct {
-	shift int32
+	Shift int32
 }
 
 // function that takes as paramters: *wasmer.Engine, *environment, []byte with wasm module,
 // return the instance
-func GetNewWasmInstace(engine *wasmer.Engine, store *wasmer.Store, n int32, i []byte) (*wasmer.Instance, error) {
+func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.Store, i []byte) (*wasmer.Instance, error) {
 	// Create a new module from some WebAssembly in its text representation
 	// (for the sake of simplicity of the example).
 	//engine := wasmer.NewEngine()
 
 	// Create a store, that holds the engine.
-
-	environment := &MyEnvironment{
-		shift: n,
-	}
 
 	module, _ := wasmer.NewModule(
 		store,
@@ -47,19 +43,18 @@ func GetNewWasmInstace(engine *wasmer.Engine, store *wasmer.Store, n int32, i []
 			// Results.
 			wasmer.NewValueTypes(wasmer.I32),
 		),
-		environment,
+		env,
 
 		// The function implementation.
 
-		//TODO: change name of environment?
 		func(environment interface{}, args []wasmer.Value) ([]wasmer.Value, error) {
 			// Cast to our environment type, and do whatever we want!
 			env := environment.(*MyEnvironment)
-			e := env.shift
-			x := args[0].I32()
-			y := args[1].I32()
+			x := args[0].I32() //this is the input from the client
+			//y := args[1].I32() this will be 1
+			(*env).Shift += x
 
-			return []wasmer.Value{wasmer.NewI32(e + x + y)}, nil
+			return []wasmer.Value{wasmer.NewI32(1)}, nil
 		},
 	)
 

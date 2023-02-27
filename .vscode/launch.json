@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "/snap/ego-dev/current/opt/ego/bin/ego-host",
             "args": [
-                "/snap/ego-dev/current/opt/ego/share/ego-enclave:server/server",
+                "/snap/ego-dev/current/opt/ego/share/ego-enclave:hellowrld/hellowrld",
                 "arg1",
                 "arg2"
             ],
