@@ -149,46 +149,34 @@ func useWasmFunction(wasm_file *WasmFile, value1 int) error {
 	return nil
 }
 
-// func handlerUpload(w http.ResponseWriter, r *http.Request) {
-// 	query := r.URL.Query()
-// 	fmt.Println(query)
+func handlerUpload(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	fmt.Println(query)
 
-// 	//_, err := strconv.Atoi(query.Get("filename"))
-// 	// if err != nil {
-// 	// 	fmt.Fprint(w, err)
-// 	// }
+	//_, err := strconv.Atoi(query.Get("filename"))
+	// if err != nil {
+	// 	fmt.Fprint(w, err)
+	// }
 
-// 	err := getWasmFile(r)
+	err := getWasmFile(r)
 
-// 	if err != nil {
-// 		fmt.Fprint(w, err)
-// 	}
-// }
+	if err != nil {
+		fmt.Fprint(w, err)
+	}
+}
 
 func main() {
 
 	//mux := http.NewServeMux()
 
-	wasm_file.File = []byte(`
-	(module
-		;; We import a math.sum function.
-		(import "math" "sum" (func $sum (param i32 i32) (result i32)))
-
-		;; We export an add_one function.
-		(func (export "add_one") (param $x i32) (result i32)
-			local.get $x
-			i32.const 1
-			call $sum))
-	`)
-
 	http.HandleFunc("/Add", handlerAdd)
-	//.HandleFunc("/Upload", handlerUpload)
+	http.HandleFunc("/Upload", handlerUpload)
 
 	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
-	server := http.Server{Addr: ":8080"}
+	server := http.Server{Addr: ":8081"}
 	fmt.Println("Listening...")
 	err := server.ListenAndServe()
 

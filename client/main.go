@@ -12,8 +12,8 @@ import (
 const usage_add string = "Usage: client <cmd> <key> <value>"
 const usage_upload string = "Usage: client <upload> <file>"
 
-const addEndPoint = "http://localhost:8080/Add"
-const uploadEndPoint = "http://localhost:8080/Upload"
+const addEndPoint = "http://localhost:8081/Add"
+const uploadEndPoint = "http://localhost:8081/Upload"
 
 type Client struct {
 	c    *http.Client
