@@ -19,17 +19,7 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 
 	module, _ := wasmer.NewModule(
 		store,
-		[]byte(`
-			(module
-			;; We import a math.sum function.
-			(import "math" "sum" (func $sum (param i32 i32) (result i32)))
-
-			;; We export an add_one function.
-			(func (export "add_one") (param $x i32) (result i32)
-				local.get $x
-				i32.const 1
-				call $sum))
-		`),
+		i,
 	)
 
 	// Let's create a new host function for `math.sum`.

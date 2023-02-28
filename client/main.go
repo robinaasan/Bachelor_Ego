@@ -37,29 +37,16 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	// resp, err := http.Get("http://localhost:8080/monkeys")
-	// if err != nil {
-	// 	panic("wups")
-	// }
-	// bs := make([]byte, 99999)
-	// resp.Body.Read(bs)
-	// fmt.Println(string(bs))
 }
 
 func runTerminalCommands(client *Client) error {
 
-	//serverURL := flag.String("url", "localhost:8080", "Server's url")
 	flag.Parse()
 	args := flag.Args()
-	//req := url.URL{Scheme: "http", Host: *serverURL, Path: "/secret"}
-
 	q := url.Values{}
 
 	if len(args) < 1 {
 		panic(usage_add)
-		// } else { // bare for å sjekke
-		// 	fmt.Printf(args[0])
-		// 	fmt.Printf(args[1])
 	}
 
 	switch args[0] {
@@ -69,8 +56,6 @@ func runTerminalCommands(client *Client) error {
 		}
 		q.Add("cmd", "add")
 		q.Add("val1", args[1])
-		//	q.Add("val2", args[2])
-
 		err := getAdd(q, client)
 
 		if err != nil {
@@ -83,8 +68,6 @@ func runTerminalCommands(client *Client) error {
 			panic(usage_upload)
 		}
 		q.Add("cmd", "upload")
-		//q.Add("filename", args[1])
-
 		err := postUploadFile(q, client)
 		if err != nil {
 			return err
@@ -94,31 +77,24 @@ func runTerminalCommands(client *Client) error {
 	default: // optimalt panic(usage)
 		q.Add("cmd", "add")
 		q.Add("val1", args[1])
-
 	}
 
-	//fmt.Println(q)
-
 	return nil
-	// Byte for reading the response
-
 }
 
 func getAdd(q url.Values, client *Client) error {
 	b := &bytes.Buffer{}
 
 	req, err := http.NewRequest("POST", addEndPoint, b)
-	//req.RawQuery = q.Encode()
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
 
-	//client := &http.Client{}
 	resp, err := client.c.Do(req)
 	if err != nil {
 		return err
 	}
 
 	//response from server:
-	bs := make([]byte, 99999)
+	bs := make([]byte, 1024)
 	resp.Body.Read(bs)
 	fmt.Printf("%v\n", string(bs))
 
@@ -174,14 +150,12 @@ func postUploadFile(q url.Values, client *Client) error {
 	// 	return err
 	// }
 	req, err := http.NewRequest("POST", uploadEndPoint, bytes.NewBuffer(json_data))
-	//req.RawQuery = q.Encode()
 	if err != nil {
 		return err
 	}
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
 	req.Header.Set("Content-Type", "application/json")
 
-	//client := &http.Client{}
 	resp, err := client.c.Do(req)
 	if err != nil {
 		return err

@@ -28,24 +28,14 @@ var env = wasmcounter.MyEnvironment{Shift: int32(0)}
 func handlerAdd(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 
-	// if len(wasm_file.fileBytes) == 0 {
-	// 	fmt.Fprintf(w, "There is no wasm file here!")
-	// 	return
-	// }
+	if len(wasm_file.File) == 0 {
+		fmt.Fprintf(w, "There is no wasm file here!")
+		return
+	}
 
 	query := r.URL.Query()
-
-	//command := query.Get("cmd")
-	// if command == "add" {
-	// 	//Add the numbers
-	// } else if command == "upload" {
-	// 	//upload the stuff
-	// } else {
-	// 	fmt.Fprint(w, errors.New("Error: No parameter included"))
-
-	// }
 	fmt.Println(query)
-	//cmd := query.Get("cmd")
+
 	var query_key_val1 int
 
 	query_key_val1, err := strconv.Atoi(query.Get("val1"))
@@ -69,13 +59,6 @@ func getWasmFile(r *http.Request) error {
 	//var buf bytes.Buffer
 	// in your case file would be fileupload
 	//file, header, err := r.FormFile("file")
-	// decoder := json.NewDecoder(r.Body)
-
-	// err := decoder.Decode(&wasm_file)
-	//body, err := ioutil.ReadAll(r.Body)
-	// if err != nil {
-	// 	return err
-	// }
 
 	err := json.NewDecoder(r.Body).Decode(&wasm_file)
 
@@ -85,36 +68,10 @@ func getWasmFile(r *http.Request) error {
 
 	fmt.Printf("Json: %v", string(wasm_file.File))
 
-	// if err != nil {
-
-	// 	return fmt.Errorf(err.Error())
-
-	// 	//panic(err)
-	// }
-
-	//defer file.Close()
-	// name_type := strings.Split(header.Filename, ".")
-
-	// if name_type[1] == "wasm" {
-	// 	fmt.Println("Correct file type!")
-	// } else {
-	// 	return fmt.Errorf("Wanted file type: txt and got filetype: %v", name_type[1])
-
-	// 	//os.Exit(1)
-	// }
-
 	// fmt.Printf("Filename: %v\n", name_type[0])
 	// io.Copy(&buf, file)
 
-	//	wasmBytes :=
-
-	//wasm_file.fileBytes = buf.Bytes()
-
 	return nil
-
-	// if err != nil {
-	// 	fmt.Errorf(err.Error())
-	// }
 }
 
 func useWasmFunction(wasm_file *WasmFile, value1 int) error {
@@ -134,7 +91,6 @@ func useWasmFunction(wasm_file *WasmFile, value1 int) error {
 	if err != nil {
 		return err
 	}
-
 	fmt.Println(addOne.Type())
 	//fmt.Println(addOne.ParameterArity())
 	//fmt.Println(addOne.ResultArity())
@@ -153,11 +109,6 @@ func handlerUpload(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	fmt.Println(query)
 
-	//_, err := strconv.Atoi(query.Get("filename"))
-	// if err != nil {
-	// 	fmt.Fprint(w, err)
-	// }
-
 	err := getWasmFile(r)
 
 	if err != nil {
@@ -166,8 +117,6 @@ func handlerUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-
-	//mux := http.NewServeMux()
 
 	http.HandleFunc("/Add", handlerAdd)
 	http.HandleFunc("/Upload", handlerUpload)
@@ -179,15 +128,9 @@ func main() {
 	server := http.Server{Addr: ":8081"}
 	fmt.Println("Listening...")
 	err := server.ListenAndServe()
-
+	// server.ListenAndServeTLS("", "")
 	fmt.Println(err)
-	//http.ListenAndServe(":8080", nil)
 
 	// debug.PrintStack()
-
-	// server.ListenAndServeTLS("", "")
-	//server.ListenAndServe()
-
-	//http.ListenAndServe(":8080", nil)
 
 }
