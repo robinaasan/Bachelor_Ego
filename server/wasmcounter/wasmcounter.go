@@ -8,6 +8,11 @@ type MyEnvironment struct {
 	Shift int32
 }
 
+type WasmerGO struct {
+	Instance *wasmer.Instance
+	Function *wasmer.Function
+}
+
 // function that takes as paramters: *wasmer.Engine, *environment, []byte with wasm module,
 // return the instance
 func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.Store, i []byte) (*wasmer.Instance, error) {

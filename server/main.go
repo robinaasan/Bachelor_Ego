@@ -22,6 +22,7 @@ func newWasmFile() *WasmFile {
 
 var wasm_file = newWasmFile()
 var env = wasmcounter.MyEnvironment{Shift: int32(0)}
+var wasmer_module = wasmcounter.WasmerGO{Instance: nil, Function: nil}
 
 //var storage = newStorage()
 
@@ -79,22 +80,25 @@ func useWasmFunction(wasm_file *WasmFile, value1 int) error {
 	engine := wasmer.NewEngine()
 	store := wasmer.NewStore(engine)
 
-	// Compiles the module
-	instance, err := wasmcounter.GetNewWasmInstace(&env, engine, store, wasm_file.File)
+	if wasmer_module.Instance == nil {
+		fmt.Println("Creating Instance...")
+		instance, err := wasmcounter.GetNewWasmInstace(&env, engine, store, wasm_file.File)
+		if err != nil {
+			return err
+		}
+		wasmer_module.Instance = instance
+		addOne, err := wasmer_module.Instance.Exports.GetRawFunction("add_one")
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
+		wasmer_module.Function = addOne
 	}
 
-	addOne, err := instance.Exports.GetRawFunction("add_one")
-
-	if err != nil {
-		return err
-	}
-	fmt.Println(addOne.Type())
+	fmt.Println(wasmer_module.Function.Type())
 	//fmt.Println(addOne.ParameterArity())
 	//fmt.Println(addOne.ResultArity())
-	result, err := addOne.Call(value1)
+	result, err := wasmer_module.Function.Call(value1)
 
 	if err != nil {
 		return err
@@ -121,14 +125,15 @@ func main() {
 	http.HandleFunc("/Add", handlerAdd)
 	http.HandleFunc("/Upload", handlerUpload)
 
-	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	//embeds certificate on its own by default
+	// tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
 	server := http.Server{Addr: ":8081"}
 	fmt.Println("Listening...")
 	err := server.ListenAndServe()
-	// server.ListenAndServeTLS("", "")
+	//err = server.ListenAndServeTLS("", "")
 	fmt.Println(err)
 
 	// debug.PrintStack()
