@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/edgelesssys/ego/ecrypto"
 	"github.com/robinaasan/Bachelor_Ego/server/wasmcounter"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -148,6 +149,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	//fmt.Printf("%v\n", env.Store)
 	// debug.PrintStack()
 
 }
@@ -163,7 +165,12 @@ func mustSaveState() error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile("./secret.store", b.Bytes(), 0600); err != nil {
+	encState, err := ecrypto.SealWithProductKey(b.Bytes(), nil)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile("data/secret.store", encState, 0600); err != nil {
 		return fmt.Errorf("Error: creating file responded with: %v", err)
 	}
 	return nil
@@ -171,12 +178,17 @@ func mustSaveState() error {
 
 //read the file and set map in env from storage
 func LoadState() error {
-	file, err := os.ReadFile("./secret.store")
+	file, err := os.ReadFile("data/secret.store")
 	if os.IsNotExist(err) {
-		return nil
+		return fmt.Errorf("Error: the file does not exist")
 	}
 	//the storage exists
-	dec := gob.NewDecoder(bytes.NewBuffer(file))
+	decrypted_file, err := ecrypto.Unseal(file, nil)
+	if err != nil {
+		return err
+	}
+
+	dec := gob.NewDecoder(bytes.NewBuffer(decrypted_file))
 	err = dec.Decode(&env.Store)
 	if err != nil {
 		return err

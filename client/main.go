@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 const usage_set string = "Usage: client <cmd> <key> <value>"
@@ -105,17 +106,21 @@ func getAdd(q url.Values, client *Client) error {
 
 func postUploadFile(q url.Values, client *Client) error {
 	// https://webassembly.github.io/wabt/demo/wat2wasm/
-	wasmBytes := []byte(`
-	(module
-		;; We import a math.set function.
-		(import "math" "set" (func $set (param i32 i32) (result i32)))
+	// 	wasmBytes := []byte(`
+	// 	(module
+	// 		;; We import a math.set function.
+	// 		(import "math" "set" (func $set (param i32 i32) (result i32)))
 
-		;; We export an add_one function.
-		(func (export "add_one") (param $x i32) (param $y i32) (result i32)
-			local.get $x
-			local.get $y
-			call $set))
-`)
+	// 		;; We export an add_one function.
+	// 		(func (export "add_one") (param $x i32) (param $y i32) (result i32)
+	// 			local.get $x
+	// 			local.get $y
+	// 			call $set))
+	// `)
+	wasmBytes, err := os.ReadFile("./test.wasm")
+	if err != nil {
+		return err
+	}
 	wasmMap := map[string][]byte{"File": wasmBytes}
 	json_data, err := json.Marshal(wasmMap)
 
