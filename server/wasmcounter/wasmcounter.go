@@ -5,12 +5,18 @@ import (
 )
 
 type MyEnvironment struct {
-	Shift int32
+	Store map[int32]int32
 }
 
 type WasmerGO struct {
 	Instance *wasmer.Instance
 	Function *wasmer.Function
+}
+
+func NewEnvironment() (*MyEnvironment) {
+	return &MyEnvironment{
+		Store: make(map[int32]int32),
+	}
 }
 
 // function that takes as paramters: *wasmer.Engine, *environment, []byte with wasm module,
@@ -46,9 +52,9 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 			// Cast to our environment type, and do whatever we want!
 			env := environment.(*MyEnvironment)
 			x := args[0].I32() //this is the input from the client
-			//y := args[1].I32() this will be 1
-			(*env).Shift += x
-
+			y := args[1].I32()
+			(*env).Store[x] = y
+			//TODO: add some logic for checking if key exists or not
 			return []wasmer.Value{wasmer.NewI32(1)}, nil
 		},
 	)
@@ -60,7 +66,7 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 	importObject.Register(
 		"math",
 		map[string]wasmer.IntoExtern{
-			"sum": function,
+			"set": function,
 		},
 	)
 
