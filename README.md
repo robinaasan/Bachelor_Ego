@@ -21,13 +21,36 @@ sudo apt install build-essential libssl-dev
 ```
 
 ### Wasmer
-Download wasmer-go: wget -O- https://github.com/wasmerio/wasmer/releases/download/2.2.1/wasmer-linux-amd64.tar.gz | tar xz --one-top-level=wasmer
-
+Download wasmer-go: 
+```bash
+wget -O- https://github.com/wasmerio/wasmer/releases/download/2.2.1/wasmer-linux-amd64.tar.gz | tar xz --one-top-level=wasmer
+```
 Tell go compiler to use it:
+```bash
 CGO_CFLAGS="-I$PWD/wasmer/include" CGO_LDFLAGS="$PWD/wasmer/lib/libwasmer.a -ldl -lm -static-libgcc" ego-go build -tags custom_wasmer_runtime
+```
 
+### enclave.json
+```json
+{
+ "exe": "server",
+ "key": "private.pem",
+ "debug": true,
+ "heapSize": 512,
+ "executableHeap": true,
+ "productID": 1,
+ "securityVersion": 1,
+ "mounts": [
+        {
+            "source": "/home/stud/robin/Bachelor_Ego/server",
+            "target": "/data",
+            "type": "hostfs",
+            "readOnly": false
+        }
+           ]
+}
+```
 ## Usage
-
 How to use the application...
 
 
