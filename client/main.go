@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 )
 
-const usage_add string = "Usage: client <cmd> <key> <value>"
+const usage_set string = "Usage: client <cmd> <key> <value>"
 const usage_upload string = "Usage: client <upload> <file>"
 
 const addEndPoint = "http://localhost:8081/Add"
@@ -46,16 +47,18 @@ func runTerminalCommands(client *Client) error {
 	q := url.Values{}
 
 	if len(args) < 1 {
-		panic(usage_add)
+		panic(usage_set)
 	}
 
 	switch args[0] {
-	case "add":
-		if len(args) < 2 {
-			panic(usage_add)
+	case "SET":
+		if len(args) < 3 {
+			panic(usage_set)
 		}
-		q.Add("cmd", "add")
-		q.Add("val1", args[1])
+		q.Add("cmd", "SET")
+		q.Add("key", args[1])
+		q.Add("value", args[2])
+
 		err := getAdd(q, client)
 
 		if err != nil {
@@ -63,11 +66,11 @@ func runTerminalCommands(client *Client) error {
 		}
 		//run function that calls one endpoint
 
-	case "upload":
+	case "UPLOAD":
 		if len(args) < 1 {
 			panic(usage_upload)
 		}
-		q.Add("cmd", "upload")
+		q.Add("cmd", "UPLOAD")
 		err := postUploadFile(q, client)
 		if err != nil {
 			return err
@@ -75,8 +78,7 @@ func runTerminalCommands(client *Client) error {
 
 		//run function that calls the other one
 	default: // optimalt panic(usage)
-		q.Add("cmd", "add")
-		q.Add("val1", args[1])
+		panic(usage_set)
 	}
 
 	return nil
@@ -103,17 +105,22 @@ func getAdd(q url.Values, client *Client) error {
 }
 
 func postUploadFile(q url.Values, client *Client) error {
-	wasmBytes := []byte(`
-	(module
-		;; We import a math.sum function.
-		(import "math" "sum" (func $sum (param i32 i32) (result i32)))
+	// https://webassembly.github.io/wabt/demo/wat2wasm/
+	// 	wasmBytes := []byte(`
+	// 	(module
+	// 		;; We import a math.set function.
+	// 		(import "math" "set" (func $set (param i32 i32) (result i32)))
 
-		;; We export an add_one function.
-		(func (export "add_one") (param $x i32) (result i32)
-			local.get $x
-			i32.const 1
-			call $sum))
-`)
+	// 		;; We export an add_one function.
+	// 		(func (export "add_one") (param $x i32) (param $y i32) (result i32)
+	// 			local.get $x
+	// 			local.get $y
+	// 			call $set))
+	// `)
+	wasmBytes, err := os.ReadFile("./test.wasm")
+	if err != nil {
+		return err
+	}
 	wasmMap := map[string][]byte{"File": wasmBytes}
 	json_data, err := json.Marshal(wasmMap)
 
