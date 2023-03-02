@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"log"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 
 	"github.com/edgelesssys/ego/ecrypto"
-	"github.com/edgelesssys/ego/enclave"
+	//"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/server/wasmcounter"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -35,6 +37,25 @@ var wasmer_module = wasmcounter.WasmerGO{Instance: nil, Function: nil}
 func handlerSet(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 
+	serverURL := flag.String("url", "localhost:8082", "Server's url")
+	flag.Parse()
+
+	req := url.URL{Scheme: "http", Host: *serverURL, Path: "/"}
+	q := url.Values{}
+
+	req.RawQuery = q.Encode()
+	client := http.Client{}
+	resp, err := client.Get(req.String())
+	if err != nil {
+		fmt.Fprint(w, err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Fprint(w, err)
+	}
+	fmt.Println(string(body))
+
+	//Slutt client ordering
 	if len(wasm_file.File) == 0 {
 		fmt.Fprintf(w, "There is no wasm file here!")
 		return
@@ -133,14 +154,18 @@ func handlerUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// err := mustSaveState()
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
 	http.HandleFunc("/Add", handlerSet)
 	http.HandleFunc("/Upload", handlerUpload)
 
 	//embeds certificate on its own by default
 	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	server := http.Server{Addr: ":8081"}
 	fmt.Println("Listening...")
 	err := server.ListenAndServe()
@@ -172,7 +197,7 @@ func mustSaveState() error {
 		return err
 	}
 
-	if err := os.WriteFile("data/secret.store", encState, 0600); err != nil {
+	if err := os.WriteFile("/data/secret.store", encState, 0600); err != nil {
 		return fmt.Errorf("Error: creating file responded with: %v", err)
 	}
 	return nil
@@ -180,9 +205,11 @@ func mustSaveState() error {
 
 //read the file and set map in env from storage
 func LoadState() error {
-	file, err := os.ReadFile("data/secret.store")
+	file, err := os.ReadFile("/data/secret.store")
 	if os.IsNotExist(err) {
-		return fmt.Errorf("Error: the file does not exist")
+		
+		fmt.Println("The file does not exist, creating one in this enclave ...")
+		mustSaveState()
 	}
 	//the storage exists
 	decrypted_file, err := ecrypto.Unseal(file, nil)

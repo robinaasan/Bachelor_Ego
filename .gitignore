@@ -2,3 +2,4 @@
 /server/private.pem
 /server/public.pem
 /server/server
+/server/secret.store
