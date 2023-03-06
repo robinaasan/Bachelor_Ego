@@ -13,7 +13,7 @@ type WasmerGO struct {
 	Function *wasmer.Function
 }
 
-func NewEnvironment() (*MyEnvironment) {
+func NewEnvironment() *MyEnvironment {
 	return &MyEnvironment{
 		Store: make(map[int32]int32),
 	}
@@ -42,7 +42,7 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 			// Parameters.
 			wasmer.NewValueTypes(wasmer.I32, wasmer.I32),
 			// Results.
-			wasmer.NewValueTypes(wasmer.I32),
+			wasmer.NewValueTypes(wasmer.I32, wasmer.I32, wasmer.I32),
 		),
 		env,
 
@@ -51,11 +51,17 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 		func(environment interface{}, args []wasmer.Value) ([]wasmer.Value, error) {
 			// Cast to our environment type, and do whatever we want!
 			env := environment.(*MyEnvironment)
-			x := args[0].I32() //this is the input from the client
-			y := args[1].I32()
+			x := args[0].I32() //key
+			y := args[1].I32() //value
+			prevVal, exists := env.Store[x]
 			(*env).Store[x] = y
 			//TODO: add some logic for checking if key exists or not
-			return []wasmer.Value{wasmer.NewI32(1)}, nil
+
+			if exists {
+				return []wasmer.Value{wasmer.NewI32(x), wasmer.NewI32(y), wasmer.NewI32(prevVal)}, nil
+			}
+			// did not exist before...
+			return []wasmer.Value{wasmer.NewI32(x), wasmer.NewI32(y), wasmer.NewI32(0)}, nil
 		},
 	)
 

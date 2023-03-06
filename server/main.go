@@ -5,13 +5,11 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
 
 	"github.com/edgelesssys/ego/ecrypto"
-	"github.com/edgelesssys/ego/enclave"
 
 	//"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/server/wasmcounter"
@@ -162,14 +160,14 @@ func main() {
 	http.HandleFunc("/Upload", handlerUpload)
 
 	//embeds certificate on its own by default
-	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	server := http.Server{Addr: ":8082", TLSConfig: tlsConfig}
+	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	server := http.Server{Addr: ":8082"}
 	fmt.Println("Listening...")
-	//err := server.ListenAndServe()
-	err = server.ListenAndServeTLS("", "")
+	err := server.ListenAndServe()
+	// err = server.ListenAndServeTLS("", "")
 
 	//err := LoadState()
 	if err != nil {
