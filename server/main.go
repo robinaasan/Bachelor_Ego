@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 
 	"github.com/edgelesssys/ego/ecrypto"
+	"github.com/edgelesssys/ego/enclave"
+
 	//"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/server/wasmcounter"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
@@ -37,23 +37,23 @@ var wasmer_module = wasmcounter.WasmerGO{Instance: nil, Function: nil}
 func handlerSet(w http.ResponseWriter, r *http.Request) {
 	//fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 
-	serverURL := flag.String("url", "localhost:8082", "Server's url")
-	flag.Parse()
+	// serverURL := flag.String("url", "localhost:8083", "Server's url")
+	// flag.Parse()
 
-	req := url.URL{Scheme: "http", Host: *serverURL, Path: "/"}
-	q := url.Values{}
+	// req := url.URL{Scheme: "http", Host: *serverURL, Path: "/"}
+	// q := url.Values{}
 
-	req.RawQuery = q.Encode()
-	client := http.Client{}
-	resp, err := client.Get(req.String())
-	if err != nil {
-		fmt.Fprint(w, err)
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Fprint(w, err)
-	}
-	fmt.Println(string(body))
+	// req.RawQuery = q.Encode()
+	// client := http.Client{}
+	// resp, err := client.Get(req.String())
+	// if err != nil {
+	// 	fmt.Fprint(w, err)
+	// }
+	// body, err := ioutil.ReadAll(resp.Body)
+	// if err != nil {
+	// 	fmt.Fprint(w, err)
+	// }
+	// fmt.Println(string(body))
 
 	//Slutt client ordering
 	if len(wasm_file.File) == 0 {
@@ -162,18 +162,18 @@ func main() {
 	http.HandleFunc("/Upload", handlerUpload)
 
 	//embeds certificate on its own by default
-	//tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	server := http.Server{Addr: ":8081"}
+	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	server := http.Server{Addr: ":8082", TLSConfig: tlsConfig}
 	fmt.Println("Listening...")
-	err := server.ListenAndServe()
-	// err = server.ListenAndServeTLS("", "")
+	//err := server.ListenAndServe()
+	err = server.ListenAndServeTLS("", "")
 
 	//err := LoadState()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error here!", err)
 		return
 	}
 	//fmt.Printf("%v\n", env.Store)
@@ -207,13 +207,14 @@ func mustSaveState() error {
 func LoadState() error {
 	file, err := os.ReadFile("/data/secret.store")
 	if os.IsNotExist(err) {
-		
+
 		fmt.Println("The file does not exist, creating one in this enclave ...")
 		mustSaveState()
 	}
 	//the storage exists
 	decrypted_file, err := ecrypto.Unseal(file, nil)
 	if err != nil {
+		fmt.Println("Error unsealing...")
 		return err
 	}
 

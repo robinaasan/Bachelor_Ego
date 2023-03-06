@@ -2,45 +2,61 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/edgelesssys/ego/attestation"
+	"github.com/edgelesssys/ego/eclient"
 )
 
 const usage_set string = "Usage: client <cmd> <key> <value>"
 const usage_upload string = "Usage: client <upload> <file>"
 
-const addEndPoint = "http://localhost:8081/Add"
-const uploadEndPoint = "http://localhost:8081/Upload"
+const addEndPoint = "http://localhost:8082/Add"
+const uploadEndPoint = "http://localhost:8082/Upload"
 
-type Client struct {
-	c    *http.Client
-	name string
-}
+// type Client struct {
+// 	c    *http.Client
+// 	name string
+// }
 
-func NewClient() *Client {
-	c := &http.Client{}
-	return &Client{
-		c:    c,
-		name: "Robs",
-	}
-}
+// func NewClient() *Client {
+// 	c := &http.Client{}
+// 	return &Client{
+// 		c:    c,
+// 		name: "Robs",
+// 	}
+// }
 
 func main() {
 
-	client := NewClient()
+	uniqueID, err := hex.DecodeString("cce6aabb18a65eab007b9411d8205208c0203c8814772b9f9260559bee84f49e")
 
-	err := runTerminalCommands(client)
+	verifyReport := func(report attestation.Report) error {
+		if !bytes.Equal(report.UniqueID, uniqueID) {
+			fmt.Println("ASJDOASJDOAJS")
+			return errors.New("invalid UniqueID")
+		}
+		return nil
+	}
+	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
+	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	//client := http.Client{}
+
+	err = runTerminalCommands(client)
 
 	if err != nil {
 		fmt.Println(err)
 	}
 }
 
-func runTerminalCommands(client *Client) error {
+func runTerminalCommands(client http.Client) error {
 
 	flag.Parse()
 	args := flag.Args()
@@ -84,13 +100,13 @@ func runTerminalCommands(client *Client) error {
 	return nil
 }
 
-func getAdd(q url.Values, client *Client) error {
+func getAdd(q url.Values, client http.Client) error {
 	b := &bytes.Buffer{}
 
 	req, err := http.NewRequest("POST", addEndPoint, b)
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
 
-	resp, err := client.c.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -104,7 +120,7 @@ func getAdd(q url.Values, client *Client) error {
 	return nil
 }
 
-func postUploadFile(q url.Values, client *Client) error {
+func postUploadFile(q url.Values, client http.Client) error {
 	// https://webassembly.github.io/wabt/demo/wat2wasm/
 	// 	wasmBytes := []byte(`
 	// 	(module
@@ -163,7 +179,7 @@ func postUploadFile(q url.Values, client *Client) error {
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.c.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
