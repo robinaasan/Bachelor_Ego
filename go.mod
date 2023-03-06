@@ -9,7 +9,4 @@ require (
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 )
 
-require (
-	github.com/edgelesssys/ego v1.1.0
-//github.com/stretchr/testify v1.8.1 // indirect
-)
+require github.com/edgelesssys/ego v1.1.0
