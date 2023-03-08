@@ -3,6 +3,8 @@ package blockchain
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 )
 
 // type Transaction struct {
@@ -11,9 +13,10 @@ import (
 // }
 
 type Block struct {
-	Hash     []byte
-	Data     []byte //will be a transaction
-	PrevHash []byte
+	TimeStamp string `json:"TimeStamp"`
+	Hash      []byte `json:"Hash"`
+	Data      []byte `json:"Data"` //will be a transaction
+	PrevHash  []byte `json:"PrevHash"`
 }
 
 func (b *Block) DeriveHash() {
@@ -22,14 +25,33 @@ func (b *Block) DeriveHash() {
 	b.Hash = hash[:]
 }
 
-func CreateBlock(data string, prevHash []byte) *Block {
-	block := &Block{Hash: []byte{}, Data: []byte(data), PrevHash: prevHash}
+func (b *Block) Serialize() ([]byte, error) {
+	jsonBody, err := json.Marshal(b)
+	if err != nil {
+		return nil, err
+	}
+	return jsonBody, nil
+}
+
+func CreateBlock(data []byte, prevHash []byte, time string) *Block {
+
+	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash}
 	block.DeriveHash()
 	return block
 }
 
-func CreateGenesis() *Block {
-	return CreateBlock("Genesis", []byte{})
+func CreateGenesis(time string) *Block {
+	return CreateBlock([]byte("Genesis"), []byte{}, time)
+}
+
+func (b *Block) PrintBlock() {
+	//const layout = "2006-01-02 15:04:05.999999999 -0700 MST"
+	//timeStamp, _ := time.Parse(layout, b.TimeStamp)
+	fmt.Printf("Timestamp %s\n", b.TimeStamp)
+	fmt.Printf("Prev hash: %x\n", b.PrevHash)
+	fmt.Printf("Data: %s\n", b.Data)
+	fmt.Printf("Hash: %x\n", b.Hash)
+	fmt.Println()
 }
 
 // func SetGenesysFile(filename string) {

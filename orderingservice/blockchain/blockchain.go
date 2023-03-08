@@ -1,19 +1,25 @@
 package blockchain
 
 type BlockChain struct {
-	blocks []*Block
+	Blocks []*Block
 }
 
 func (c *BlockChain) GenesisExists() bool {
-	return c.blocks[0].Data != nil
+	return c.Blocks[0].Data != nil
 }
 
-func InitBlockChain() *BlockChain {
-	return &BlockChain{blocks: []*Block{CreateGenesis()}}
+func InitBlockChain(time string) *BlockChain {
+	return &BlockChain{Blocks: []*Block{CreateGenesis(time)}}
 }
 
-func (c *BlockChain) AddNewblock(data string) {
-	prevBlock := c.blocks[len(c.blocks)-1]
-	n := CreateBlock(data, prevBlock.PrevHash)
-	c.blocks = append(c.blocks, n)
+func (c *BlockChain) AddNewblock(data []byte, time string) {
+	prevBlock := c.Blocks[len(c.Blocks)-1]
+	n := CreateBlock(data, prevBlock.Hash, time)
+	c.Blocks = append(c.Blocks, n)
+}
+
+func (b *BlockChain) PrintChain() {
+	for _, d := range b.Blocks {
+		d.PrintBlock()
+	}
 }
