@@ -5,15 +5,14 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
 
 	"github.com/edgelesssys/ego/ecrypto"
-	"github.com/edgelesssys/ego/enclave"
 
 	//"github.com/edgelesssys/ego/enclave"
+	"github.com/benpate/convert"
 	"github.com/robinaasan/Bachelor_Ego/server/wasmcounter"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -27,6 +26,8 @@ func newWasmFile() *WasmFile {
 		File: []byte{},
 	}
 }
+
+const orderingURL = "http://localhost:8087"
 
 var wasm_file = newWasmFile()
 var env = wasmcounter.NewEnvironment()
@@ -135,10 +136,39 @@ func useWasmFunction(wasm_file *WasmFile, key int, value int) error {
 		return err
 	}
 
-	//Write to the store!
+	//Write to from env to store!
 	mustSaveState()
-	fmt.Printf("Returned: %v, Store value: %v\n", result, env.Store)
 
+	nl := convert.SliceOfInt(result)
+	key, newVal, oldVal := nl[0], nl[1], nl[2]
+	err = sendToOrdering(key, newVal, oldVal)
+	if err != nil {
+		fmt.Println(err)
+	}
+	//TODO: write function that notices about a change to orderingservice
+	fmt.Printf("key= %v V=%v N=%v", key, newVal, oldVal)
+
+	fmt.Printf("Returned: %v, Type:%T Store value: %v\n", nl, nl, env.Store)
+
+	return nil
+}
+
+func sendToOrdering(key int, newVal int, oldVal int) error {
+	body := map[string]int{"Key": key, "NewVal": newVal, "OldVal": oldVal}
+
+	jsonBody, err := json.Marshal(body)
+	req, err := http.NewRequest("POST", orderingURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	runtime := &http.Client{}
+	res, err := runtime.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
 	return nil
 }
 
@@ -162,14 +192,14 @@ func main() {
 	http.HandleFunc("/Upload", handlerUpload)
 
 	//embeds certificate on its own by default
-	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	server := http.Server{Addr: ":8082", TLSConfig: tlsConfig}
+	// tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	server := http.Server{Addr: ":8085"}
 	fmt.Println("Listening...")
-	//err := server.ListenAndServe()
-	err = server.ListenAndServeTLS("", "")
+	err := server.ListenAndServe()
+	//err = server.ListenAndServeTLS("", "")
 
 	//err := LoadState()
 	if err != nil {
@@ -207,7 +237,8 @@ func mustSaveState() error {
 func LoadState() error {
 	file, err := os.ReadFile("/data/secret.store")
 	if os.IsNotExist(err) {
-
+		
+		//TODO:
 		fmt.Println("The file does not exist, creating one in this enclave ...")
 		mustSaveState()
 	}
