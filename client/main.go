@@ -2,24 +2,19 @@ package main
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
-
-	"github.com/edgelesssys/ego/attestation"
-	"github.com/edgelesssys/ego/eclient"
 )
 
 const usage_set string = "Usage: client <cmd> <key> <value>"
 const usage_upload string = "Usage: client <upload> <file>"
 
-const addEndPoint = "http://localhost:8082/Add"
-const uploadEndPoint = "http://localhost:8082/Upload"
+const addEndPoint = "http://localhost:8086/Add"
+const uploadEndPoint = "http://localhost:8086/Upload"
 
 // type Client struct {
 // 	c    *http.Client
@@ -36,20 +31,18 @@ const uploadEndPoint = "http://localhost:8082/Upload"
 
 func main() {
 
-	uniqueID, err := hex.DecodeString("cce6aabb18a65eab007b9411d8205208c0203c8814772b9f9260559bee84f49e")
+	//uniqueID, _ := hex.DecodeString("4357c77dad078b6e6f55df6534c9894d855fbebeae127f9ae55ab7dc53c737e4")
 
-	verifyReport := func(report attestation.Report) error {
-		if !bytes.Equal(report.UniqueID, uniqueID) {
-			fmt.Println("ASJDOASJDOAJS")
-			return errors.New("invalid UniqueID")
-		}
-		return nil
-	}
-	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
-	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	//client := http.Client{}
-
-	err = runTerminalCommands(client)
+	// verifyReport := func(report attestation.Report) error {
+	// 	if !bytes.Equal(report.UniqueID, uniqueID) {
+	// 		return errors.New("invalid UniqueID")
+	// 	}
+	// 	return nil
+	// }
+	//tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
+	//client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	client := http.Client{}
+	err := runTerminalCommands(client)
 
 	if err != nil {
 		fmt.Println(err)
@@ -57,7 +50,6 @@ func main() {
 }
 
 func runTerminalCommands(client http.Client) error {
-
 	flag.Parse()
 	args := flag.Args()
 	q := url.Values{}
@@ -65,7 +57,6 @@ func runTerminalCommands(client http.Client) error {
 	if len(args) < 1 {
 		panic(usage_set)
 	}
-
 	switch args[0] {
 	case "SET":
 		if len(args) < 3 {
@@ -74,9 +65,7 @@ func runTerminalCommands(client http.Client) error {
 		q.Add("cmd", "SET")
 		q.Add("key", args[1])
 		q.Add("value", args[2])
-
 		err := getAdd(q, client)
-
 		if err != nil {
 			return err
 		}
@@ -91,12 +80,10 @@ func runTerminalCommands(client http.Client) error {
 		if err != nil {
 			return err
 		}
-
 		//run function that calls the other one
 	default: // optimalt panic(usage)
 		panic(usage_set)
 	}
-
 	return nil
 }
 
@@ -104,13 +91,15 @@ func getAdd(q url.Values, client http.Client) error {
 	b := &bytes.Buffer{}
 
 	req, err := http.NewRequest("POST", addEndPoint, b)
+	if err != nil {
+		return err
+	}
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
 
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
-
 	//response from server:
 	bs := make([]byte, 1024)
 	resp.Body.Read(bs)
@@ -123,55 +112,24 @@ func getAdd(q url.Values, client http.Client) error {
 func postUploadFile(q url.Values, client http.Client) error {
 	// https://webassembly.github.io/wabt/demo/wat2wasm/
 	// 	wasmBytes := []byte(`
-	// 	(module
-	// 		;; We import a math.set function.
-	// 		(import "math" "set" (func $set (param i32 i32) (result i32)))
-
-	// 		;; We export an add_one function.
-	// 		(func (export "add_one") (param $x i32) (param $y i32) (result i32)
-	// 			local.get $x
-	// 			local.get $y
-	// 			call $set))
+	//  (module
+	// 		(type $t0 (func (param i32 i32) (result i32 i32 i32)))
+	// 		(import "math" "set" (func $set (type $t0)))
+	// 		(func $add_one (export "add_one") (type $t0) (param $x i32) (param $y i32) (result i32 i32 i32)
+	// 	  		(call $set
+	// 				(local.get $x)
+	// 				(local.get $y))))
 	// `)
-	wasmBytes, err := os.ReadFile("./test.wasm")
+	wasmBytes, err := os.ReadFile("./newwasm.wasm")
 	if err != nil {
 		return err
 	}
 	wasmMap := map[string][]byte{"File": wasmBytes}
 	json_data, err := json.Marshal(wasmMap)
 
-	//file, err := os.Open(filepath)
-	// if err != nil {
-	// 	return err
-	// }
-
-	//defer file.Close()
-
-	//b := &bytes.Buffer{}
-
-	//writer := multipart.NewWriter(b)
-
-	//part, err := writer.CreateFormFile("file", filepath)
-
-	// if err != nil {
-	// 	return err
-	// }
-
-	// _, err = io.Copy(part, file)
-
-	// if err != nil {
-	// 	return err
-	// }
-
-	// err = writer.Close()
-
-	// if err != nil {
-	// 	return err
-	// }
-
-	// if err != nil {
-	// 	return err
-	// }
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequest("POST", uploadEndPoint, bytes.NewBuffer(json_data))
 	if err != nil {
 		return err
@@ -183,7 +141,6 @@ func postUploadFile(q url.Values, client http.Client) error {
 	if err != nil {
 		return err
 	}
-
 	//response from server:
 	bs := make([]byte, 512)
 	resp.Body.Read(bs)

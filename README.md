@@ -30,7 +30,7 @@ Tell go compiler to use it:
 CGO_CFLAGS="-I$PWD/wasmer/include" CGO_LDFLAGS="$PWD/wasmer/lib/libwasmer.a -ldl -lm -static-libgcc" ego-go build -tags custom_wasmer_runtime
 ```
 
-### enclave.json
+### enclave.json in server (change username)
 ```json
 {
  "exe": "server",
@@ -48,6 +48,29 @@ CGO_CFLAGS="-I$PWD/wasmer/include" CGO_LDFLAGS="$PWD/wasmer/lib/libwasmer.a -ldl
             "readOnly": false
         }
            ]
+}
+```
+
+### enclave.json in orderingservice (change username)
+```json
+{
+    "exe": "orderingservice",
+    "key": "private.pem",
+    "debug": true,
+    "heapSize": 512,
+    "executableHeap": false,
+    "productID": 1,
+    "securityVersion": 1,
+    "mounts": [
+        {
+            "source": "/home/stud/robin/Bachelor_Ego/orderingservice/blockFiles",
+            "target": "/blockFiles",
+            "type": "hostfs",
+            "readOnly": false
+        }
+    ],
+    "env": null,
+    "files":
 }
 ```
 ## Usage
