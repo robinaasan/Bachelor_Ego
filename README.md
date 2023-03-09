@@ -57,9 +57,14 @@ sudo chown <user> ./.git -R #to change permissions
 ls -l #to see permissions
 ```
 
+## Set go environment variables
+```bash
+go env [-json] [-u] [-w] [var ...] #TLS needs some variables to be set
+```
 
 ## Usage
 How to use the application...
+https://pkg.go.dev/github.com/edgelesssys/ego EGo library
 
 
 
