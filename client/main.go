@@ -5,16 +5,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 )
 
 const usage_set string = "Usage: client <cmd> <key> <value>"
-const usage_upload string = "Usage: client <upload> <file>"
+const usage_upload string = "Usage: client <UPLOAD> <USERNAME>"
 
 const addEndPoint = "http://localhost:8086/Add"
 const uploadEndPoint = "http://localhost:8086/Upload"
+const initEndPoint = "http://localhost:8086/Init"
 
 // type Client struct {
 // 	c    *http.Client
@@ -28,6 +30,7 @@ const uploadEndPoint = "http://localhost:8086/Upload"
 // 		name: "Robs",
 // 	}
 // }
+//var userHash []byte
 
 func main() {
 
@@ -58,13 +61,25 @@ func runTerminalCommands(client http.Client) error {
 		panic(usage_set)
 	}
 	switch args[0] {
+
+	case "INIT":
+		//TODO: usage
+		if len(args) < 2 {
+			panic(usage_set)
+		}
+		q.Add("username", args[1]) //Username of the client
+		err := getAndStoreHash(q, client)
+		if err != nil {
+			return err
+		}
 	case "SET":
-		if len(args) < 3 {
+		if len(args) < 4 {
 			panic(usage_set)
 		}
 		q.Add("cmd", "SET")
 		q.Add("key", args[1])
 		q.Add("value", args[2])
+		q.Add("username", args[3])
 		err := getAdd(q, client)
 		if err != nil {
 			return err
@@ -72,11 +87,12 @@ func runTerminalCommands(client http.Client) error {
 		//run function that calls one endpoint
 
 	case "UPLOAD":
-		if len(args) < 1 {
+		if len(args) < 2 {
 			panic(usage_upload)
 		}
 		q.Add("cmd", "UPLOAD")
-		err := postUploadFile(q, client)
+		q.Add("username", args[1]) //name of the user
+		err := postUploadFile(q, client, args[1])
 		if err != nil {
 			return err
 		}
@@ -109,7 +125,26 @@ func getAdd(q url.Values, client http.Client) error {
 	return nil
 }
 
-func postUploadFile(q url.Values, client http.Client) error {
+func getAndStoreHash(q url.Values, client http.Client) error {
+	// b := []byte{}
+	req, err := http.NewRequest("GET", initEndPoint, nil)
+	if err != nil {
+		return err
+	}
+	req.URL.RawQuery = q.Encode()
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	resBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Res: %v", resBody)
+	return nil
+}
+
+func postUploadFile(q url.Values, client http.Client, name string) error {
 	// https://webassembly.github.io/wabt/demo/wat2wasm/
 	// 	wasmBytes := []byte(`
 	//  (module

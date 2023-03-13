@@ -12,9 +12,9 @@ func InitBlockChain(time string) *BlockChain {
 	return &BlockChain{Blocks: []*Block{CreateGenesis(time)}}
 }
 
-func (c *BlockChain) AddNewblock(data []byte, time string) {
+func (c *BlockChain) AddNewblock(data []byte, time string, client string) {
 	prevBlock := c.Blocks[len(c.Blocks)-1]
-	n := CreateBlock(data, prevBlock.Hash, time)
+	n := CreateBlock(data, prevBlock.Hash, time, client)
 	c.Blocks = append(c.Blocks, n)
 }
 

@@ -13,10 +13,11 @@ import (
 // }
 
 type Block struct {
-	TimeStamp string `json:"TimeStamp"`
-	Hash      []byte `json:"Hash"`
-	Data      []byte `json:"Data"` //will be a transaction
-	PrevHash  []byte `json:"PrevHash"`
+	ClientName string `json:"ClientName"`
+	TimeStamp  string `json:"TimeStamp"`
+	Hash       []byte `json:"Hash"`
+	Data       []byte `json:"Data"` //will be a transaction
+	PrevHash   []byte `json:"PrevHash"`
 }
 
 func (b *Block) DeriveHash() {
@@ -33,15 +34,14 @@ func (b *Block) Serialize() ([]byte, error) {
 	return jsonBody, nil
 }
 
-func CreateBlock(data []byte, prevHash []byte, time string) *Block {
-
-	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash}
+func CreateBlock(data []byte, prevHash []byte, time string, client string) *Block {
+	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash, ClientName: client}
 	block.DeriveHash()
 	return block
 }
 
 func CreateGenesis(time string) *Block {
-	return CreateBlock([]byte("Genesis"), []byte{}, time)
+	return CreateBlock([]byte("Genesis"), []byte{}, time, "Genesis")
 }
 
 func (b *Block) PrintBlock() {
