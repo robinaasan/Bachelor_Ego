@@ -13,11 +13,10 @@ import (
 // }
 
 type Block struct {
-	ClientName string `json:"ClientName"`
-	TimeStamp  string `json:"TimeStamp"`
-	Hash       []byte `json:"Hash"`
-	Data       []byte `json:"Data"` //will be a transaction
-	PrevHash   []byte `json:"PrevHash"`
+	TimeStamp string `json:"TimeStamp"`
+	Hash      []byte `json:"Hash"`
+	Data      []byte `json:"Data"` //will be a transaction
+	PrevHash  []byte `json:"PrevHash"`
 }
 
 func (b *Block) DeriveHash() {

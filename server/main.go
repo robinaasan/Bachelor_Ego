@@ -24,6 +24,12 @@ type transaction struct {
 	OldVal     int
 }
 
+// type Runtime struct {
+// 	name string
+// 	runtimeClient *http.Client
+// }
+
+
 func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
 	t := transaction{
 		ClientName: nameClient,

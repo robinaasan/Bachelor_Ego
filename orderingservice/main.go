@@ -25,6 +25,9 @@ type Transaction struct {
 	ClientName string `json:"ClientName"`
 }
 
+var count int
+var allTransactions []byte
+
 func main() {
 	//TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, GenesisFile)
@@ -52,8 +55,6 @@ func main() {
 //Add the block to the blockChain
 //TODO: notify the runtimes about the change!
 func handlerTransaction(w http.ResponseWriter, r *http.Request) {
-	// query := r.URL.Query()
-	// clientName := query.Get("client")
 	newTransAction := &Transaction{}
 	err := json.NewDecoder(r.Body).Decode(newTransAction)
 	if err != nil {
@@ -66,16 +67,23 @@ func handlerTransaction(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Error transforming the transaction")
 		return
 	}
-	block_chain.AddNewblock(transactionData, time.Now().String())
-	addedBlock := block_chain.Blocks[len(block_chain.Blocks)-1]
-	newBlockFileName := fmt.Sprintf("%s%x.json", PATH, addedBlock.Hash)
-	fmt.Println(newBlockFileName)
-	err = addBlockFile(newBlockFileName, addedBlock)
-	if err != nil {
-		fmt.Fprintf(w, "Error adding the block in the blockchain")
+	allTransactions = append(allTransactions, transactionData...)
+	count++
+	if count == 5 {
+		count = 0
+		//block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
+		block_chain.AddNewblock(allTransactions, time.Now().String())
+		addedBlock := block_chain.Blocks[len(block_chain.Blocks)-1]
+		newBlockFileName := fmt.Sprintf("%s%x.json", PATH, addedBlock.Hash)
+		fmt.Println(newBlockFileName)
+		err = addBlockFile(newBlockFileName, addedBlock)
+		if err != nil {
+			fmt.Fprintf(w, "Error adding the block in the blockchain")
+		}
+		allTransactions = nil
+		fmt.Fprintf(w, "Blockasdddad added")
 	}
 	//s := fmt.Sprintf("%s", r.RemoteAddr)
-	fmt.Fprintf(w, "Block added")
 }
 
 //Add the block as a json file in the filesystem

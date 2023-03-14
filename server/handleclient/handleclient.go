@@ -95,7 +95,8 @@ func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string
 		if err != nil {
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 		}
-		fmt.Printf("Env: %+v", wasmcounter.Env)
+		
+		//fmt.Printf("Env: %+v", wasmcounter.Env)
 		fmt.Fprintf(w, "ACK\n")
 	}
 }
