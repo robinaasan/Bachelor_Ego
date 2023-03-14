@@ -79,10 +79,12 @@ func handlerTransaction(w http.ResponseWriter, r *http.Request) {
 		err = addBlockFile(newBlockFileName, addedBlock)
 		if err != nil {
 			fmt.Fprintf(w, "Error adding the block in the blockchain")
+			return
 		}
+		// new rquest to every runtime connected with x new transactions
 		allTransactions = nil
-		fmt.Fprintf(w, "Blockasdddad added")
 	}
+	fmt.Fprintf(w, "ACK")
 	//s := fmt.Sprintf("%s", r.RemoteAddr)
 }
 

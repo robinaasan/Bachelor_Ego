@@ -14,6 +14,17 @@ type HashResponse struct {
 	Hash []byte `json:"Hash"`
 }
 
+type Transaction struct {
+	Key        int    `json:"Key"`
+	NewVal     int    `json:"NewVal"`
+	OldVal     int    `json:"OldVal"`
+	ClientName string `json:"ClientName"`
+}
+
+type Callback struct {
+	CallbackList []*Transaction
+}
+
 //Handler for the client
 func InitHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -94,10 +105,23 @@ func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string
 		err = sendToOrdering(setvalues, string(theClient.Hash))
 		if err != nil {
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
+			return
 		}
-		
+
 		//fmt.Printf("Env: %+v", wasmcounter.Env)
 		fmt.Fprintf(w, "ACK\n")
+	}
+}
+
+func Handle_callback() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callback := &Callback{}
+		err := json.NewDecoder(r.Body).Decode(callback)
+		if err != nil {
+			fmt.Fprintf(w, "Error: decoding the data")
+		}
+		fmt.Printf("%+v", callback)
+		fmt.Fprintf(w, "OK")
 	}
 }
 

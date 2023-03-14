@@ -75,6 +75,8 @@ func main() {
 	http.HandleFunc("/Init", handleclient.InitHandler())
 	http.HandleFunc("/Add", handleclient.SetHandler(mustSaveState, sendToOrdering))
 	http.HandleFunc("/Upload", handleclient.UploadHandler())
+	http.HandleFunc("/Callback", handleclient.Handle_callback())
+	//TODO: get response from senToOrdering and call handle_callback()
 	//The function embeds ego-certificate on its own
 	// tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
 	// if err != nil {
