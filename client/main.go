@@ -44,7 +44,7 @@ func main() {
 	// }
 	//tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
 	//client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	client := http.Client{}
+	client := &http.Client{}
 	err := runTerminalCommands(client)
 
 	if err != nil {
@@ -52,7 +52,7 @@ func main() {
 	}
 }
 
-func runTerminalCommands(client http.Client) error {
+func runTerminalCommands(client *http.Client) error {
 	flag.Parse()
 	args := flag.Args()
 	q := url.Values{}
@@ -103,7 +103,7 @@ func runTerminalCommands(client http.Client) error {
 	return nil
 }
 
-func getAdd(q url.Values, client http.Client) error {
+func getAdd(q url.Values, client *http.Client) error {
 	b := &bytes.Buffer{}
 
 	req, err := http.NewRequest("POST", addEndPoint, b)
@@ -117,34 +117,42 @@ func getAdd(q url.Values, client http.Client) error {
 		return err
 	}
 	//response from server:
-	bs := make([]byte, 1024)
-	resp.Body.Read(bs)
-	fmt.Printf("%v\n", string(bs))
-
+	// bs := make([]byte, 1024)
+	// resp.Body.Read(bs)
+	// fmt.Printf("%v\n", string(bs))
 	defer resp.Body.Close()
+
+	resBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Printf("Res: %v", string(resBody))
+
 	return nil
 }
 
-func getAndStoreHash(q url.Values, client http.Client) error {
+func getAndStoreHash(q url.Values, client *http.Client) error {
 	// b := []byte{}
 	req, err := http.NewRequest("GET", initEndPoint, nil)
 	if err != nil {
 		return err
 	}
 	req.URL.RawQuery = q.Encode()
+	//(*client).Timeout = 5 * time.Second
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Res: %v", resBody)
+	fmt.Printf("Res: %v", string(resBody))
 	return nil
 }
 
-func postUploadFile(q url.Values, client http.Client, name string) error {
+func postUploadFile(q url.Values, client *http.Client, name string) error {
 	// https://webassembly.github.io/wabt/demo/wat2wasm/
 	// 	wasmBytes := []byte(`
 	//  (module
@@ -177,11 +185,13 @@ func postUploadFile(q url.Values, client http.Client, name string) error {
 		return err
 	}
 	//response from server:
-	bs := make([]byte, 512)
-	resp.Body.Read(bs)
-	fmt.Printf("%v\n", string(bs))
 
 	defer resp.Body.Close()
+	resBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Res: %v", string(resBody))
 	//fmt.Println(string(b.Bytes()))
 	return nil
 }

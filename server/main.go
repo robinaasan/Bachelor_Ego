@@ -5,8 +5,8 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/edgelesssys/ego/ecrypto"
@@ -18,33 +18,37 @@ import (
 const orderingURL = "http://localhost:8087"
 
 type transaction struct {
-	Key    int
-	NewVal int
-	OldVal int
+	ClientName string
+	Key        int
+	NewVal     int
+	OldVal     int
 }
 
 func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
 	t := transaction{
-		Key:    setvalues.Key,
-		NewVal: setvalues.NewVal,
-		OldVal: setvalues.OldVal,
+		ClientName: nameClient,
+		Key:        setvalues.Key,
+		NewVal:     setvalues.NewVal,
+		OldVal:     setvalues.OldVal,
 	}
-	q := url.Values{}
+	//q := url.Values{}
 	//body := map[string]int{"Key": setvalues.Key, "NewVal": setvalues.NewVal, "OldVal": setvalues.OldVal}
-	q.Add("client", nameClient)
+	//q.Add("client", nameClient)
 	jsonBody, err := json.Marshal(t)
 	req, err := http.NewRequest("POST", orderingURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.URL.RawQuery = q.Encode()
+	//req.URL.RawQuery = q.Encode()
 	runtime := &http.Client{}
 	res, err := runtime.Do(req)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
+	responseData, err := io.ReadAll(res.Body)
+	fmt.Println(string(responseData))
 	return nil
 }
 

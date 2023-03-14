@@ -69,7 +69,7 @@ func (cl *Client) UseWasmFunction(key int, value int, env *wasmcounter.MyEnviron
 		return setvalues, errors.New("error: the function for the client isn't set")
 	}
 
-	fmt.Println(cl.Wasm.Function.Type())
+	//fmt.Println(cl.Wasm.Function.Type())
 	//fmt.Println(smart_contract.ParameterArity())
 	//fmt.Println(smart_contract.ResultArity())
 	result, err := cl.Wasm.Function.Call(key, value)

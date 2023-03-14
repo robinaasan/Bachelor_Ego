@@ -34,14 +34,14 @@ func (b *Block) Serialize() ([]byte, error) {
 	return jsonBody, nil
 }
 
-func CreateBlock(data []byte, prevHash []byte, time string, client string) *Block {
-	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash, ClientName: client}
+func CreateBlock(data []byte, prevHash []byte, time string) *Block {
+	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash}
 	block.DeriveHash()
 	return block
 }
 
 func CreateGenesis(time string) *Block {
-	return CreateBlock([]byte("Genesis"), []byte{}, time, "Genesis")
+	return CreateBlock([]byte("Genesis"), []byte{}, time)
 }
 
 func (b *Block) PrintBlock() {

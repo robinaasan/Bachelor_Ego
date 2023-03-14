@@ -21,8 +21,8 @@ func InitHandler() http.HandlerFunc {
 		client_name := query.Get("username")
 		new_client := NewClient(client_name)
 		AllClients[string(new_client.Hash)] = new_client
-		fmt.Printf("Createt client with 'hash': %s", new_client.Hash)
-		fmt.Fprint(w, new_client.Hash)
+		fmt.Printf("Createt client with 'hash': %s\n", new_client.Hash)
+		fmt.Fprint(w, "ACK\n")
 	}
 }
 
@@ -39,12 +39,13 @@ func UploadHandler() http.HandlerFunc {
 		theClient, err := GetClient([]byte(client_name))
 		if err != nil {
 			fmt.Fprintf(w, "Error: couldn't find that client\n")
+			return
 		}
 		err = theClient.GetWasmFile(r)
 		if err != nil {
 			fmt.Fprint(w, err.Error())
 		}
-		fmt.Fprint(w, theClient)
+		fmt.Fprint(w, "ACK\n")
 	}
 }
 
@@ -95,6 +96,7 @@ func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 		}
 		fmt.Printf("Env: %+v", wasmcounter.Env)
+		fmt.Fprintf(w, "ACK\n")
 	}
 }
 
@@ -104,7 +106,7 @@ func (cl *Client) GetWasmFile(r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Json: %v", string(cl.Wasm_file.File))
+	//fmt.Printf("Json: %v", string(cl.Wasm_file.File))
 	return nil
 }
 
