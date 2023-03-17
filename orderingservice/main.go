@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/blockchain"
@@ -17,6 +19,8 @@ var block_chain *blockchain.BlockChain
 const PATH = "./blockFiles/"
 const GenesisFile = "genesys.json"
 
+var runtimes = []string{"http://localhost:8086/Callback", "http://localhost:8086/Callback"}
+
 //name below should be replaces by som hash later
 type Transaction struct {
 	Key        int    `json:"Key"`
@@ -25,8 +29,14 @@ type Transaction struct {
 	ClientName string `json:"ClientName"`
 }
 
+type ResponsesRuntime struct {
+	response string
+	endpoint string
+	err      error
+}
+
 var count int
-var allTransactions []byte
+var allTransactions []*Transaction
 
 func main() {
 	//TODO: verify the integrity of the blocks if there is a genesis block
@@ -43,7 +53,7 @@ func main() {
 			fmt.Println(err)
 		}
 	}
-	block_chain.PrintChain()
+	//block_chain.PrintChain()
 	http.HandleFunc("/", handlerTransaction)
 
 	server := http.Server{Addr: "localhost:8087"}
@@ -61,31 +71,102 @@ func handlerTransaction(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Error reading the transaction")
 		return
 	}
-	fmt.Printf("%+v", newTransAction)
-	transactionData, err := json.Marshal(newTransAction)
+	//fmt.Printf("%+v", newTransAction)
 	if err != nil {
 		fmt.Fprintf(w, "Error transforming the transaction")
 		return
 	}
-	allTransactions = append(allTransactions, transactionData...)
+	allTransactions = append(allTransactions, newTransAction)
 	count++
-	if count == 5 {
+	if count == 2 {
 		count = 0
+		allTransactionBytes, err := json.Marshal(allTransactions)
+		if err != nil {
+			fmt.Fprintf(w, "Error: decoding the transaction went wrong")
+			return
+		}
 		//block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
-		block_chain.AddNewblock(allTransactions, time.Now().String())
+		block_chain.AddNewblock(allTransactionBytes, time.Now().String())
 		addedBlock := block_chain.Blocks[len(block_chain.Blocks)-1]
 		newBlockFileName := fmt.Sprintf("%s%x.json", PATH, addedBlock.Hash)
-		fmt.Println(newBlockFileName)
+		//fmt.Println(newBlockFileName)
 		err = addBlockFile(newBlockFileName, addedBlock)
 		if err != nil {
 			fmt.Fprintf(w, "Error adding the block in the blockchain")
 			return
 		}
+		//responselist := make([]ResponsesRuntime, 1)
+		cl := &http.Client{}
+		sendCallback(allTransactionBytes, runtimes, cl)
+		// if err != nil {
+		// 	fmt.Printf("Error: %v", err)
+		// }
+
 		// new rquest to every runtime connected with x new transactions
 		allTransactions = nil
 	}
 	fmt.Fprintf(w, "ACK")
 	//s := fmt.Sprintf("%s", r.RemoteAddr)
+}
+
+func sendCallback(allTransactionBytes []byte, endpoints []string, cl *http.Client) {
+	var wg sync.WaitGroup
+	c := make(chan ResponsesRuntime)
+	for _, endpoint := range endpoints {
+		wg.Add(1)
+		go checkURL(endpoint, c, &wg, allTransactionBytes, cl)
+	}
+	go func() {
+		wg.Wait()
+		close(c)
+	}()
+
+	for r := range c {
+		// if r.err != nil {
+
+		// 	s := fmt.Sprintf("Error: endpoint: %s got: %v\n", r.endpoint, r.err)
+		// 	fmt.Printf("%v", s)
+		// } else {
+		// 	fmt.Println(r.response + "\n")
+		// }
+		if r.err != nil {
+			fmt.Printf("Error requesting %s: %v\n", r.endpoint, r.err)
+			continue
+		}
+		fmt.Printf("%+v\n", r)
+	}
+}
+
+func checkURL(endpoint string, c chan ResponsesRuntime, wg *sync.WaitGroup, allTransactionBytes []byte, cl *http.Client) {
+	defer (*wg).Done()
+
+	//responseruntime := ResponsesRuntime{endpoint: endpoint}
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(allTransactionBytes))
+	// if err != nil {
+	// 	s = err.Error()
+	// }
+	if err != nil {
+		c <- ResponsesRuntime{endpoint, "", err}
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := cl.Do(req)
+
+	if err != nil {
+		c <- ResponsesRuntime{endpoint, "", err}
+		return
+	}
+
+	// if err != nil {
+	// 	s = err.Error()
+	// }
+
+	defer res.Body.Close()
+	//resBody, err := io.ReadAll(res.Body)
+
+	// fmt.Printf("Res: %v", string(resBody))
+	c <- ResponsesRuntime{endpoint, res.Status, nil}
 }
 
 //Add the block as a json file in the filesystem

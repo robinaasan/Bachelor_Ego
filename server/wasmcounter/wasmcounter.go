@@ -28,7 +28,7 @@ func NewEnvironment() *MyEnvironment {
 //I think the engine and store can be global /same for every client
 var Engine = wasmer.NewEngine()
 var Store = wasmer.NewStore(Engine)
-var Env = &MyEnvironment{Store: make(map[int32]int32)}
+var Env = NewEnvironment()
 
 // function that takes as paramters: *wasmer.Engine, *environment, []byte with wasm module,
 // return the instance
@@ -59,7 +59,7 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 			x := args[0].I32() //key
 			y := args[1].I32() //val
 			oldVal, exists := env.Store[x]
-			(*env).Store[x] = y
+			// (*env).Store[x] = y
 			if exists {
 				return []wasmer.Value{wasmer.NewI32(x), wasmer.NewI32(y), wasmer.NewI32(oldVal)}, nil
 			}

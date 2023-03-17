@@ -17,21 +17,13 @@ import (
 
 const orderingURL = "http://localhost:8087"
 
-type transaction struct {
-	ClientName string
-	Key        int
-	NewVal     int
-	OldVal     int
-}
-
 // type Runtime struct {
 // 	name string
 // 	runtimeClient *http.Client
 // }
 
-
 func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
-	t := transaction{
+	t := handleclient.Transaction{
 		ClientName: nameClient,
 		Key:        setvalues.Key,
 		NewVal:     setvalues.NewVal,
@@ -41,6 +33,9 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
 	//body := map[string]int{"Key": setvalues.Key, "NewVal": setvalues.NewVal, "OldVal": setvalues.OldVal}
 	//q.Add("client", nameClient)
 	jsonBody, err := json.Marshal(t)
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequest("POST", orderingURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return err
@@ -54,6 +49,9 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
 	}
 	defer res.Body.Close()
 	responseData, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
 	fmt.Println(string(responseData))
 	return nil
 }
@@ -72,10 +70,11 @@ func main() {
 	if err != nil {
 		panic("Error getting the environment")
 	}
+
 	http.HandleFunc("/Init", handleclient.InitHandler())
-	http.HandleFunc("/Add", handleclient.SetHandler(mustSaveState, sendToOrdering))
+	http.HandleFunc("/Add", handleclient.SetHandler(mustSaveState, sendToOrdering, wasmcounter.Env))
 	http.HandleFunc("/Upload", handleclient.UploadHandler())
-	http.HandleFunc("/Callback", handleclient.Handle_callback())
+	http.HandleFunc("/Callback", handleclient.Handle_callback(setTransactionsInEnvironment))
 	//TODO: get response from senToOrdering and call handle_callback()
 	//The function embeds ego-certificate on its own
 	// tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
@@ -90,6 +89,19 @@ func main() {
 		fmt.Println("Error here!", err)
 		return
 	}
+}
+
+func setTransactionsInEnvironment(c *handleclient.Callback) error {
+	for _, t := range c.CallbackList {
+		(*wasmcounter.Env).Store[int32(t.Key)] = int32(t.NewVal)
+	}
+	//store all the transactions
+	err := mustSaveState()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%v\n", wasmcounter.Env.Store)
+	return nil
 }
 
 // Stores secrets to disk from the Environment (defined in the wasmcounter package)

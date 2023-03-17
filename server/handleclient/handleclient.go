@@ -60,7 +60,7 @@ func UploadHandler() http.HandlerFunc {
 	}
 }
 
-func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string) error) http.HandlerFunc {
+func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string) error, env *wasmcounter.MyEnvironment) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		client_name := query.Get("username")
@@ -91,16 +91,11 @@ func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string
 			}
 		}
 		//Client use the wasmfunction
-		setvalues, err := theClient.UseWasmFunction(key, value, wasmcounter.Env, wasmcounter.Engine, wasmcounter.Store)
+		setvalues, err := theClient.UseWasmFunction(key, value, env, wasmcounter.Engine, wasmcounter.Store)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Fprintln(w, err)
 			return
-		}
-		//TODO: save the state
-		err = mustSaveState()
-		if err != nil {
-			fmt.Printf("Error saving state: %s", err.Error())
 		}
 		err = sendToOrdering(setvalues, string(theClient.Hash))
 		if err != nil {
@@ -108,20 +103,23 @@ func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string
 			return
 		}
 
-		//fmt.Printf("Env: %+v", wasmcounter.Env)
+		//No error from senToOrdering
 		fmt.Fprintf(w, "ACK\n")
 	}
 }
 
-func Handle_callback() http.HandlerFunc {
+func Handle_callback(setTransactionsInEnvironment func(*Callback) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		callback := &Callback{}
-		err := json.NewDecoder(r.Body).Decode(callback)
+		err := json.NewDecoder(r.Body).Decode(&callback.CallbackList)
 		if err != nil {
 			fmt.Fprintf(w, "Error: decoding the data")
+			return
 		}
-		fmt.Printf("%+v", callback)
+		//fmt.Printf("%+v", *callback.CallbackList[0])
 		fmt.Fprintf(w, "OK")
+		
+		setTransactionsInEnvironment(callback)
 	}
 }
 
