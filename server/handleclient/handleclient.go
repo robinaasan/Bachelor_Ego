@@ -104,7 +104,7 @@ func SetHandler(mustSaveState func() error, sendToOrdering func(SetValue, string
 		}
 
 		//No error from senToOrdering
-		fmt.Fprintf(w, "ACK\n")
+		//fmt.Fprintf(w, "ACK\n")
 	}
 }
 
@@ -118,7 +118,7 @@ func Handle_callback(setTransactionsInEnvironment func(*Callback) error) http.Ha
 		}
 		//fmt.Printf("%+v", *callback.CallbackList[0])
 		fmt.Fprintf(w, "OK")
-		
+
 		setTransactionsInEnvironment(callback)
 	}
 }

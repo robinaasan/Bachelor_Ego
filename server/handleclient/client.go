@@ -25,15 +25,17 @@ type Client struct {
 	Wasm      *wasmcounter.WasmerGO
 }
 
-//the string is hashed and sent to client so the server know which client to use
-//var AllClients map[[32]byte]*Client
-var AllClients = make(map[string]*Client)
-
 type SetValue struct {
 	Key    int
 	NewVal int
 	OldVal int
 }
+
+//the string is hashed and sent to client so the server know which client to use
+//var AllClients map[[32]byte]*Client
+var AllClients = make(map[string]*Client)
+
+
 
 //The hash should probably be created beforehand. For now the clients are seperated by their name
 //Wasm_file is the file in bytes
