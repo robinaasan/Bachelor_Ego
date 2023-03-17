@@ -1,7 +1,7 @@
 package wasmcounter
 
 import (
-	"github.com/wasmerio/wasmer-go/wasmer"
+	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
 //Environment used in wasmer
@@ -15,21 +15,31 @@ type WasmerGO struct {
 	Function *wasmer.Function
 }
 
+func NewWasmerGO() *WasmerGO {
+	return &WasmerGO{}
+}
+
 func NewEnvironment() *MyEnvironment {
 	return &MyEnvironment{
 		Store: make(map[int32]int32),
 	}
 }
+
+//I think the engine and store can be global /same for every client
+var Engine = wasmer.NewEngine()
+var Store = wasmer.NewStore(Engine)
+var Env = NewEnvironment()
+
 // function that takes as paramters: *wasmer.Engine, *environment, []byte with wasm module,
 // return the instance
 //Link: https://wasmer.io/posts/wasmer-go-embedding-1.0
-func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.Store, i []byte) (*wasmer.Instance, error) {
+func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.Store, fileBytes []byte) (*wasmer.Instance, error) {
 	// Create a new module from some WebAssembly in its text representation
 	// (for the sake of simplicity of the example).
 	// Create a store, that holds the engine.
 	module, _ := wasmer.NewModule(
 		store,
-		i,
+		fileBytes,
 	)
 	// Create a new host function for `math.set`.
 	function := wasmer.NewFunctionWithEnvironment(
@@ -49,7 +59,7 @@ func GetNewWasmInstace(env *MyEnvironment, engine *wasmer.Engine, store *wasmer.
 			x := args[0].I32() //key
 			y := args[1].I32() //val
 			oldVal, exists := env.Store[x]
-			(*env).Store[x] = y
+			// (*env).Store[x] = y
 			if exists {
 				return []wasmer.Value{wasmer.NewI32(x), wasmer.NewI32(y), wasmer.NewI32(oldVal)}, nil
 			}

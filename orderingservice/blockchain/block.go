@@ -34,7 +34,6 @@ func (b *Block) Serialize() ([]byte, error) {
 }
 
 func CreateBlock(data []byte, prevHash []byte, time string) *Block {
-
 	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash}
 	block.DeriveHash()
 	return block
