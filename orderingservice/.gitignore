@@ -1,5 +1,5 @@
-orderingservice
-private.pem
-public.pem
-secret.store
-enclave.json
+/orderingservice
+/private.pem
+/public.pem
+*.json
+!enclave.json

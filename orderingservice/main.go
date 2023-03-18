@@ -58,7 +58,7 @@ func main() {
 			fmt.Println(err)
 		}
 	}
-	//block_chain.PrintChain()
+	blockTransactionStore.blockchain.PrintChain()
 	http.HandleFunc("/", blockTransactionStore.handlerTransaction)
 
 	server := http.Server{Addr: "localhost:8087"}
@@ -95,7 +95,7 @@ func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *ht
 			return
 		}
 		//block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
-		bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
+		bt.blockchain.AddNewblock(string(allTransactionBytes), time.Now().String())
 		addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
 		newBlockFileName := fmt.Sprintf("%s%x.json", PATH, addedBlock.Hash)
 		//fmt.Println(newBlockFileName)
