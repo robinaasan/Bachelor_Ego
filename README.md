@@ -78,6 +78,10 @@ CGO_CFLAGS="-I$PWD/wasmer/include" CGO_LDFLAGS="$PWD/wasmer/lib/libwasmer.a -ldl
 sudo chown <user> ./.git -R #to change permissions
 ls -l #to see permissions
 ```
+##  tls connection
+```
+sudo echo | openssl s_client -showcerts -servername EGo -connect localhost:8082 2>/dev/null | openssl x509 -inform pem -noout -text
+```
 
 ## Set go environment variables
 ```bash
