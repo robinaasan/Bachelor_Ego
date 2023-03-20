@@ -11,12 +11,16 @@ import (
 	"os"
 )
 
-const usage_set string = "Usage: client <cmd> <key> <value>"
-const usage_upload string = "Usage: client <UPLOAD> <USERNAME>"
+const (
+	usage_set    string = "Usage: client <cmd> <key> <value>"
+	usage_upload string = "Usage: client <UPLOAD> <USERNAME>"
+)
 
-const addEndPoint = "http://localhost:8086/Add"
-const uploadEndPoint = "http://localhost:8086/Upload"
-const initEndPoint = "http://localhost:8086/Init"
+const (
+	addEndPoint    = "http://localhost:8086/Add"
+	uploadEndPoint = "http://localhost:8086/Upload"
+	initEndPoint   = "http://localhost:8086/Init"
+)
 
 // type Client struct {
 // 	c    *http.Client
@@ -30,11 +34,10 @@ const initEndPoint = "http://localhost:8086/Init"
 // 		name: "Robs",
 // 	}
 // }
-//var userHash []byte
+// var userHash []byte
 
 func main() {
-
-	//uniqueID, _ := hex.DecodeString("4357c77dad078b6e6f55df6534c9894d855fbebeae127f9ae55ab7dc53c737e4")
+	// uniqueID, _ := hex.DecodeString("4357c77dad078b6e6f55df6534c9894d855fbebeae127f9ae55ab7dc53c737e4")
 
 	// verifyReport := func(report attestation.Report) error {
 	// 	if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -42,11 +45,10 @@ func main() {
 	// 	}
 	// 	return nil
 	// }
-	//tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
-	//client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	// tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
+	// client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 	client := &http.Client{}
 	err := runTerminalCommands(client)
-
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -63,11 +65,11 @@ func runTerminalCommands(client *http.Client) error {
 	switch args[0] {
 
 	case "INIT":
-		//TODO: usage
+		// TODO: usage
 		if len(args) < 2 {
 			panic(usage_set)
 		}
-		q.Add("username", args[1]) //Username of the client
+		q.Add("username", args[1]) // Username of the client
 		err := getAndStoreHash(q, client)
 		if err != nil {
 			return err
@@ -84,19 +86,19 @@ func runTerminalCommands(client *http.Client) error {
 		if err != nil {
 			return err
 		}
-		//run function that calls one endpoint
+		// run function that calls one endpoint
 
 	case "UPLOAD":
 		if len(args) < 2 {
 			panic(usage_upload)
 		}
 		q.Add("cmd", "UPLOAD")
-		q.Add("username", args[1]) //name of the user
+		q.Add("username", args[1]) // name of the user
 		err := postUploadFile(q, client, args[1])
 		if err != nil {
 			return err
 		}
-		//run function that calls the other one
+		// run function that calls the other one
 	default: // optimalt panic(usage)
 		panic(usage_set)
 	}
@@ -116,7 +118,7 @@ func getAdd(q url.Values, client *http.Client) error {
 	if err != nil {
 		return err
 	}
-	//response from server:
+	// response from server:
 	// bs := make([]byte, 1024)
 	// resp.Body.Read(bs)
 	// fmt.Printf("%v\n", string(bs))
@@ -126,7 +128,7 @@ func getAdd(q url.Values, client *http.Client) error {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Printf("Res: %v", string(resBody))
+	fmt.Printf("Res: %v\n", string(resBody))
 
 	return nil
 }
@@ -148,7 +150,7 @@ func getAndStoreHash(q url.Values, client *http.Client) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Res: %v", string(resBody))
+	fmt.Printf("Res: %v\n", string(resBody))
 	return nil
 }
 
@@ -169,7 +171,6 @@ func postUploadFile(q url.Values, client *http.Client, name string) error {
 	}
 	wasmMap := map[string][]byte{"File": wasmBytes}
 	json_data, err := json.Marshal(wasmMap)
-
 	if err != nil {
 		return err
 	}
@@ -184,14 +185,13 @@ func postUploadFile(q url.Values, client *http.Client, name string) error {
 	if err != nil {
 		return err
 	}
-	//response from server:
+	// response from server:
 
 	defer resp.Body.Close()
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Res: %v", string(resBody))
-	//fmt.Println(string(b.Bytes()))
+	fmt.Printf("Res: %v\n", string(resBody))
 	return nil
 }
