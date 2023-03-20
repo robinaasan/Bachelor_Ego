@@ -14,12 +14,14 @@ import (
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/blockchain"
 )
 
-const PATH = "./blockFiles/"
-const GenesisFile = "genesys.json"
+const (
+	PATH    = "./blockFiles/"
+	genesis = "Block1.json"
+)
 
 var runtimes = []string{"http://localhost:8086/Callback", "http://localhost:8090/Callback"}
 
-//name below should be replaces by som hash later
+// name below should be replaces by som hash later
 type Transaction struct {
 	Key        int    `json:"Key"`
 	NewVal     int    `json:"NewVal"`
@@ -42,8 +44,8 @@ type BlockTransactionStore struct {
 }
 
 func main() {
-	//TODO: verify the integrity of the blocks if there is a genesis block
-	genBlock := fmt.Sprintf("%s%s", PATH, GenesisFile)
+	// TODO: verify the integrity of the blocks if there is a genesis block
+	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
 	block_chain := blockchain.InitBlockChain(time.Now().String())
 
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
@@ -52,7 +54,7 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
-	} else { //Load the rest of the blockchain
+	} else { // Load the rest of the blockchain
 		err := ReadAllBlockFiles(&blockTransactionStore)
 		if err != nil {
 			fmt.Println(err)
@@ -67,8 +69,8 @@ func main() {
 	fmt.Println(err)
 }
 
-//Add the block to the blockChain
-//TODO: notify the runtimes about the change!
+// Add the block to the blockChain
+// TODO: notify the runtimes about the change!
 func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *http.Request) {
 	newTransAction := &Transaction{}
 	err := json.NewDecoder(r.Body).Decode(newTransAction)
@@ -76,7 +78,7 @@ func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *ht
 		fmt.Fprintf(w, "Error reading the transaction")
 		return
 	}
-	//fmt.Printf("%+v", newTransAction)
+	// fmt.Printf("%+v", newTransAction)
 	if err != nil {
 		fmt.Fprintf(w, "Error transforming the transaction")
 		return
@@ -86,7 +88,7 @@ func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *ht
 
 	bt.allTransactions = append(bt.allTransactions, newTransAction)
 	bt.count++
-	if bt.count == 10 {
+	if bt.count == 2 {
 
 		bt.count = 0
 		allTransactionBytes, err := json.Marshal(bt.allTransactions)
@@ -94,17 +96,18 @@ func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *ht
 			fmt.Fprintf(w, "Error: decoding the transaction went wrong")
 			return
 		}
-		//block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
-		bt.blockchain.AddNewblock(string(allTransactionBytes), time.Now().String())
+		// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
+		bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
 		addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
-		newBlockFileName := fmt.Sprintf("%s%x.json", PATH, addedBlock.Hash)
-		//fmt.Println(newBlockFileName)
+		newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
+		fmt.Printf("%x\n", addedBlock.Hash)
+		// fmt.Println(newBlockFileName)
 		err = addBlockFile(newBlockFileName, addedBlock)
 		if err != nil {
 			fmt.Fprintf(w, "Error adding the block in the blockchain")
 			return
 		}
-		//responselist := make([]ResponsesRuntime, 1)
+		// responselist := make([]ResponsesRuntime, 1)
 		cl := &http.Client{}
 
 		bt.sendCallback(allTransactionBytes, runtimes, cl)
@@ -117,11 +120,11 @@ func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *ht
 
 	}
 	fmt.Fprintf(w, "ACK")
-	//s := fmt.Sprintf("%s", r.RemoteAddr)
+	// s := fmt.Sprintf("%s", r.RemoteAddr)
 }
 
 func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoints []string, cl *http.Client) {
-	//var wg sync.WaitGroup
+	// var wg sync.WaitGroup
 	c := make(chan ResponsesRuntime)
 	for _, endpoint := range endpoints {
 		bt.wg.Add(1)
@@ -152,7 +155,7 @@ func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoi
 func checkURL(endpoint string, c chan ResponsesRuntime, wg *sync.WaitGroup, allTransactionBytes []byte, cl *http.Client) {
 	defer (*wg).Done()
 
-	//responseruntime := ResponsesRuntime{endpoint: endpoint}
+	// responseruntime := ResponsesRuntime{endpoint: endpoint}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(allTransactionBytes))
 	// if err != nil {
 	// 	s = err.Error()
@@ -164,25 +167,24 @@ func checkURL(endpoint string, c chan ResponsesRuntime, wg *sync.WaitGroup, allT
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := cl.Do(req)
-
 	if err != nil {
 		c <- ResponsesRuntime{endpoint, "", err}
 		return
 	}
 	defer res.Body.Close()
-	//resBody, err := io.ReadAll(res.Body)
+	// resBody, err := io.ReadAll(res.Body)
 
 	// fmt.Printf("Res: %v", string(resBody))
 	c <- ResponsesRuntime{endpoint, res.Status, nil}
 }
 
-//Add the block as a json file in the filesystem
+// Add the block as a json file in the filesystem
 func addBlockFile(filename string, b *blockchain.Block) error {
 	jsonBody, err := b.Serialize()
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile(filename, jsonBody, 0644)
+	err = os.WriteFile(filename, jsonBody, 0o644)
 	if err != nil {
 		return err
 	}
@@ -203,32 +205,32 @@ func ReadAllBlockFiles(blockTransactionStore *BlockTransactionStore) error {
 		return err
 	}
 	for _, file_entry := range files {
-		if !file_entry.IsDir() {
-			fileType := strings.Split(file_entry.Name(), ".")
-			if fileType[1] != "json" {
-				return errors.New("wrong file type\n.")
-			}
-			newBlock := &blockchain.Block{}
-			fileBytes, err := os.ReadFile(PATH + file_entry.Name())
-			if err != nil {
-				return err
-			}
-			err = json.Unmarshal(fileBytes, newBlock)
-			if err != nil {
-				return err
-			}
-			//TODO: now the genesys block changes gets the the date updated i the blockchain, it is not created a new one
-			//There is probably a better solution than this
-			//if it is the genesis file create that first
-			if fileType[0] == "genesys" {
-				//The genesis block was created in main
-				//Below we use the timestamp and set the same hash as is stored
-				(*blockTransactionStore).blockchain.Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp)
-				(*blockTransactionStore).blockchain.Blocks[0].Data = newBlock.Data
-			} else { //genesis block is already created in the filesystem
-				(*blockTransactionStore).blockchain.AddNewblock(newBlock.Data, newBlock.TimeStamp)
-			}
+		fileType := strings.Split(file_entry.Name(), ".")
+		if fileType[1] != "json" {
+			return errors.New("wrong file type\n.")
 		}
+		fmt.Println(file_entry.Name())
+		newBlock := &blockchain.Block{}
+		fileBytes, err := os.ReadFile(PATH + file_entry.Name())
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(fileBytes, newBlock)
+		if err != nil {
+			return err
+		}
+		// TODO: now the genesys block changes gets the the date updated i the blockchain, it is not created a new one
+		// There is probably a better solution than this
+		// if it is the genesis file create that first
+		if fileType[0] == "Block1" {
+			// The genesis block was created in main
+			// Below we use the timestamp and set the same hash as is stored
+			(*blockTransactionStore).blockchain.Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp)
+			(*blockTransactionStore).blockchain.Blocks[0].Data = newBlock.Data
+		} else { // genesis block is already created in the filesystem
+			(*blockTransactionStore).blockchain.AddNewblock(newBlock.Data, newBlock.TimeStamp)
+		}
+
 	}
 	return nil
 }
