@@ -46,7 +46,7 @@ func (runtime *Runtime) InitHandler() http.HandlerFunc {
 		runtime.AllClients[string(new_client.Hash)] = new_client
 
 		fmt.Printf("Createt client with 'hash': %s\n", new_client.Hash)
-		fmt.Fprint(w, "ACK\n")
+		fmt.Fprint(w, "ACK")
 	}
 }
 
@@ -116,7 +116,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string) error) 
 			return
 		}
 
-		// No error from senToOrdering
+		// No error from sendToOrdering
 		fmt.Fprintf(w, "ACK")
 	}
 }

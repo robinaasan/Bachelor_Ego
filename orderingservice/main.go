@@ -47,7 +47,7 @@ func main() {
 	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
 	block_chain := blockchain.InitBlockChain(time.Now().String())
-
+	blockSice := 5
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
 	if !fileExist(genBlock) {
 		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
@@ -61,7 +61,9 @@ func main() {
 		}
 	}
 	blockTransactionStore.blockchain.PrintChain()
-	http.HandleFunc("/", blockTransactionStore.handlerTransaction)
+	timerChan := make(chan time.Time, blockSice+1) // when all started plus when it is finished
+	http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSice, timerChan))
+
 
 	server := http.Server{Addr: "localhost:8087"}
 	fmt.Println("Listening...")
@@ -71,56 +73,58 @@ func main() {
 
 // Add the block to the blockChain
 // TODO: notify the runtimes about the change!
-func (bt *BlockTransactionStore) handlerTransaction(w http.ResponseWriter, r *http.Request) {
-	newTransAction := &Transaction{}
-	err := json.NewDecoder(r.Body).Decode(newTransAction)
-	if err != nil {
-		fmt.Fprintf(w, "Error reading the transaction")
-		return
-	}
-	// fmt.Printf("%+v", newTransAction)
-	if err != nil {
-		fmt.Fprintf(w, "Error transforming the transaction")
-		return
-	}
-	bt.Lock()
-	defer bt.Unlock()
-
-	bt.allTransactions = append(bt.allTransactions, newTransAction)
-	bt.count++
-	if bt.count == 2 {
-
-		bt.count = 0
-		allTransactionBytes, err := json.Marshal(bt.allTransactions)
+func (bt *BlockTransactionStore) handlerTransaction(blockSice int, timerChan chan time.Time) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		newTransAction := &Transaction{}
+		err := json.NewDecoder(r.Body).Decode(newTransAction)
 		if err != nil {
-			fmt.Fprintf(w, "Error: decoding the transaction went wrong")
+			fmt.Fprintf(w, "Error reading the transaction")
 			return
 		}
-		// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
-		bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
-		addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
-		newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
-		fmt.Printf("%x\n", addedBlock.Hash)
-		// fmt.Println(newBlockFileName)
-		err = addBlockFile(newBlockFileName, addedBlock)
+		// fmt.Printf("%+v", newTransAction)
 		if err != nil {
-			fmt.Fprintf(w, "Error adding the block in the blockchain")
+			fmt.Fprintf(w, "Error transforming the transaction")
 			return
 		}
-		// responselist := make([]ResponsesRuntime, 1)
-		cl := &http.Client{}
+		bt.Lock()
+		defer bt.Unlock()
+		timerChan <- time.Now()
+		bt.allTransactions = append(bt.allTransactions, newTransAction)
+		bt.count++
+		if bt.count == blockSice {
 
-		bt.sendCallback(allTransactionBytes, runtimes, cl)
-		// if err != nil {
-		// 	fmt.Printf("Error: %v", err)
-		// }
+			bt.count = 0
+			allTransactionBytes, err := json.Marshal(bt.allTransactions)
+			if err != nil {
+				fmt.Fprintf(w, "Error: decoding the transaction went wrong")
+				return
+			}
+			// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
+			bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
+			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+			newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
+			fmt.Printf("%x\n", addedBlock.Hash)
+			// fmt.Println(newBlockFileName)
+			err = addBlockFile(newBlockFileName, addedBlock)
+			if err != nil {
+				fmt.Fprintf(w, "Error adding the block in the blockchain")
+				return
+			}
+			// responselist := make([]ResponsesRuntime, 1)
+			cl := &http.Client{}
+			timerChan <- time.Now()
+			bt.sendCallback(allTransactionBytes, runtimes, cl)
+			// if err != nil {
+			// 	fmt.Printf("Error: %v", err)
+			// }
 
-		// new rquest to every runtime connected with x new transactions
-		bt.allTransactions = nil
+			// new rquest to every runtime connected with x new transactions
+			bt.allTransactions = nil
 
+		}
+		fmt.Fprintf(w, "ACK")
+		// s := fmt.Sprintf("%s", r.RemoteAddr)
 	}
-	fmt.Fprintf(w, "ACK")
-	// s := fmt.Sprintf("%s", r.RemoteAddr)
 }
 
 func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoints []string, cl *http.Client) {

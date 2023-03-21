@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type Transaction struct {
@@ -30,11 +31,10 @@ type ResponsesRuntime struct {
 
 const orderingURL = "http://localhost:8087"
 
-//var endpoints = []string{"http://localhost:8087", "http://localhost:8087", "http://localhost:8087"}
+// var endpoints = []string{"http://localhost:8087", "http://localhost:8087", "http://localhost:8087"}
 
 func main() {
-
-	setvals := []SetValue{{2, 3, 4}, {3, 4, 5}, {6, 7, 8}, {9, 10, 11}, {12, 13, 14}, {15, 16, 17}, {18, 19, 20}, {21, 22, 23}, {24, 25, 26}, {27, 28, 29}}
+	setvals := []SetValue{{2, 3, 4}, {3, 4, 5}, {6, 7, 8}, {9, 10, 11}, {12, 13, 14}}
 
 	cl := &http.Client{}
 	var wg sync.WaitGroup
@@ -61,7 +61,7 @@ func main() {
 		// 	fmt.Printf("Error requesting %s: %v\n", r.endpoint, r.err)
 		// 	continue
 		// }
-		fmt.Printf("%+v\n", r)
+		fmt.Printf("%+v, %v\n", r.response, time.Now().Nanosecond())
 	}
 }
 
@@ -73,9 +73,9 @@ func sendToOrdering(endpoint string, setvalues SetValue, wg *sync.WaitGroup, run
 		NewVal:     setvalues.NewVal,
 		OldVal:     setvalues.OldVal,
 	}
-	//q := url.Values{}
-	//body := map[string]int{"Key": setvalues.Key, "NewVal": setvalues.NewVal, "OldVal": setvalues.OldVal}
-	//q.Add("client", nameClient)
+	// q := url.Values{}
+	// body := map[string]int{"Key": setvalues.Key, "NewVal": setvalues.NewVal, "OldVal": setvalues.OldVal}
+	// q.Add("client", nameClient)
 	jsonBody, err := json.Marshal(t)
 	if err != nil {
 		c <- ResponsesRuntime{endpoint, "", err, SetValue{}}
@@ -87,18 +87,18 @@ func sendToOrdering(endpoint string, setvalues SetValue, wg *sync.WaitGroup, run
 		return
 	}
 	req.Header.Add("Content-Type", "application/json")
-	//req.URL.RawQuery = q.Encode()
+	// req.URL.RawQuery = q.Encode()
 	res, err := runtime.Do(req)
 	if err != nil {
 		c <- ResponsesRuntime{endpoint, "", err, SetValue{}}
 		return
 	}
 	defer res.Body.Close()
-	//responseData, err := io.ReadAll(res.Body)
+	// responseData, err := io.ReadAll(res.Body)
 	if err != nil {
 		c <- ResponsesRuntime{endpoint, "", err, SetValue{}}
 		return
 	}
-	//fmt.Println(string(responseData))
+	// fmt.Println(string(responseData))
 	c <- ResponsesRuntime{endpoint, res.Status, nil, setvalues}
 }
