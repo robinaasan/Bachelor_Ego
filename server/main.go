@@ -75,7 +75,7 @@ func main() {
 	}
 
 	http.HandleFunc("/Init", runtime.InitHandler())
-	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering))
+	http.HandleFunc("/Add", runtime.TestSetHandler(sendToOrdering))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 	http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
 	// TODO: get response from senToOrdering and call handle_callback()

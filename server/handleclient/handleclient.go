@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -30,6 +31,7 @@ type EnvStore struct {
 }
 
 type Runtime struct {
+	sync.Mutex
 	RuntimeClient *http.Client
 	Engine        *wasmer.Engine
 	WasmStore     *wasmer.Store
@@ -68,6 +70,11 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 		err = theClient.GetWasmFile(r)
 		if err != nil {
 			fmt.Fprint(w, err.Error())
+			return
+		}
+		err = theClient.CreateInstanceClient(runtime)
+		if err != nil {
+			fmt.Fprint(w, err.Error())
 		}
 		fmt.Fprint(w, "ACK")
 	}
@@ -75,6 +82,8 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 
 func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		runtime.Lock()
+		defer runtime.Unlock()
 		query := r.URL.Query()
 		client_name := query.Get("username")
 		if client_name == "" {
@@ -102,6 +111,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string) error) 
 				fmt.Fprintf(w, "Error: couldn't get the value\n")
 				return
 			}
+			fmt.Println(value)
 		}
 		// Client use the wasmfunction
 		setvalues, err := theClient.UseWasmFunction(key, value, runtime)
@@ -117,7 +127,52 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string) error) 
 		}
 
 		// No error from sendToOrdering
-		fmt.Fprintf(w, "ACK")
+		// fmt.Fprintf(w, "ACK")
+	}
+}
+
+func (runtime *Runtime) TestSetHandler(sendToOrdering func(SetValue, string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		runtime.Lock()
+		defer runtime.Unlock()
+		query := r.URL.Query()
+		client_name := query.Get("username")
+		if client_name == "" {
+			fmt.Fprintf(w, "Error: didn't get any username\n")
+		}
+		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
+		if err != nil {
+			fmt.Fprintf(w, "Error: getting the client\n")
+			return
+		}
+
+		if !theClient.WasmFileExist() {
+			fmt.Fprintf(w, "Error: now wasm module uploaded")
+			return
+		}
+
+		newTransAction := &Transaction{}
+		err = json.NewDecoder(r.Body).Decode(newTransAction)
+		if err != nil {
+			fmt.Fprintf(w, "Error reading the transaction")
+			return
+		}
+		// Client use the wasmfunction
+		fmt.Println(newTransAction.NewVal)
+		setvalues, err := theClient.UseWasmFunction(newTransAction.Key, newTransAction.NewVal, runtime)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Fprintln(w, err)
+			return
+		}
+		err = sendToOrdering(setvalues, string(theClient.Hash))
+		if err != nil {
+			fmt.Printf("Error sending to orderingservice: %s", err.Error())
+			return
+		}
+
+		// No error from sendToOrdering
+		// fmt.Fprintf(w, "ACK")
 	}
 }
 

@@ -106,9 +106,7 @@ func runTerminalCommands(client *http.Client) error {
 }
 
 func getAdd(q url.Values, client *http.Client) error {
-	b := &bytes.Buffer{}
-
-	req, err := http.NewRequest("POST", addEndPoint, b)
+	req, err := http.NewRequest("POST", addEndPoint, nil)
 	if err != nil {
 		return err
 	}

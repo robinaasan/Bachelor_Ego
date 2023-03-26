@@ -47,7 +47,7 @@ func main() {
 	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
 	block_chain := blockchain.InitBlockChain(time.Now().String())
-	blockSice := 5
+	blockSice := 10
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
 	if !fileExist(genBlock) {
 		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
@@ -61,9 +61,7 @@ func main() {
 		}
 	}
 	blockTransactionStore.blockchain.PrintChain()
-	timerChan := make(chan time.Time, blockSice+1) // when all started plus when it is finished
-	http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSice, timerChan))
-
+	http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSice))
 
 	server := http.Server{Addr: "localhost:8087"}
 	fmt.Println("Listening...")
@@ -73,8 +71,9 @@ func main() {
 
 // Add the block to the blockChain
 // TODO: notify the runtimes about the change!
-func (bt *BlockTransactionStore) handlerTransaction(blockSice int, timerChan chan time.Time) http.HandlerFunc {
+func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		newTransAction := &Transaction{}
 		err := json.NewDecoder(r.Body).Decode(newTransAction)
 		if err != nil {
@@ -88,7 +87,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int, timerChan cha
 		}
 		bt.Lock()
 		defer bt.Unlock()
-		timerChan <- time.Now()
+
 		bt.allTransactions = append(bt.allTransactions, newTransAction)
 		bt.count++
 		if bt.count == blockSice {
@@ -103,16 +102,16 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int, timerChan cha
 			bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
 			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
 			newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
-			fmt.Printf("%x\n", addedBlock.Hash)
+			// fmt.Printf("%x\n", addedBlock.Hash)
 			// fmt.Println(newBlockFileName)
 			err = addBlockFile(newBlockFileName, addedBlock)
 			if err != nil {
 				fmt.Fprintf(w, "Error adding the block in the blockchain")
 				return
 			}
+
 			// responselist := make([]ResponsesRuntime, 1)
 			cl := &http.Client{}
-			timerChan <- time.Now()
 			bt.sendCallback(allTransactionBytes, runtimes, cl)
 			// if err != nil {
 			// 	fmt.Printf("Error: %v", err)
@@ -122,7 +121,9 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int, timerChan cha
 			bt.allTransactions = nil
 
 		}
-		fmt.Fprintf(w, "ACK")
+		fmt.Printf("%v ms elapsed\n", time.Since(start).Microseconds())
+		// fmt.Printf("%.4fms elapsed", time.Since(start).Milliseconds())
+		// fmt.Fprintf(w, "ACK")
 		// s := fmt.Sprintf("%s", r.RemoteAddr)
 	}
 }
@@ -139,21 +140,21 @@ func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoi
 		close(c)
 	}()
 
-	for r := range c {
-		// if r.err != nil {
+	// for r := range c {
+	// 	// if r.err != nil {
 
-		// 	s := fmt.Sprintf("Error: endpoint: %s got: %v\n", r.endpoint, r.err)
-		// 	fmt.Printf("%v", s)
-		// } else {
-		// 	fmt.Println(r.response + "\n")
-		// }
+	// 	// 	s := fmt.Sprintf("Error: endpoint: %s got: %v\n", r.endpoint, r.err)
+	// 	// 	fmt.Printf("%v", s)
+	// 	// } else {
+	// 	// 	fmt.Println(r.response + "\n")
+	// 	// }
 
-		// if r.err != nil {
-		// 	fmt.Printf("Error requesting %s: %v\n", r.endpoint, r.err)
-		// 	continue
-		// }
-		fmt.Printf("%+v\n", r)
-	}
+	// 	// if r.err != nil {
+	// 	// 	fmt.Printf("Error requesting %s: %v\n", r.endpoint, r.err)
+	// 	// 	continue
+	// 	// }
+	// 	fmt.Printf("%+v\n", r)
+	// }
 }
 
 func checkURL(endpoint string, c chan ResponsesRuntime, wg *sync.WaitGroup, allTransactionBytes []byte, cl *http.Client) {

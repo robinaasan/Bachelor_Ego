@@ -48,25 +48,10 @@ func NewClient(name string) *Client {
 }
 
 func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (SetValue, error) {
-	setvalues := SetValue{0, 0, 0}
+	
+	
 	// check if the instance already exists
-	if cl.Wasm.Instance == nil {
-		fmt.Println("Creating Instance...")
-		var err error
-		cl.Wasm.Instance, err = runtime.GetNewWasmInstace(cl.Wasm_file.File) // See global variabled
-		if err != nil {
-			return setvalues, err
-		}
-		// TODO: change name from add_one
-		smart_contract, err := cl.Wasm.Instance.Exports.GetRawFunction("add_one")
-		if err != nil {
-			return setvalues, err
-		}
-		cl.Wasm.Function = smart_contract
-	}
-	if cl.Wasm.Function == nil {
-		return setvalues, errors.New("error: the function for the client isn't set")
-	}
+	setvalues := SetValue{0, 0, 0}
 
 	// fmt.Println(cl.Wasm.Function.Type())
 	// fmt.Println(smart_contract.ParameterArity())
@@ -88,4 +73,28 @@ func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (SetValu
 	// fmt.Printf("key= %v V=%v N=%v", key, newVal, oldVal)
 	// fmt.Printf("Returned: %v, Type:%T Store value: %v\n", nl, nl, env.Store)
 	return setvalues, nil
+}
+
+func (cl *Client) CreateInstanceClient(runtime *Runtime) error {
+	// check if the instance already exists
+	if cl.Wasm.Instance == nil {
+		fmt.Println("Creating Instance...")
+		var err error
+		cl.Wasm.Instance, err = runtime.GetNewWasmInstace(cl.Wasm_file.File)
+		if err != nil {
+			return err
+		}
+		// TODO: change name from add_one
+		smart_contract, err := cl.Wasm.Instance.Exports.GetRawFunction("add_one")
+		if err != nil {
+			return err
+		}
+		cl.Wasm.Function = smart_contract
+	} else {
+		return errors.New("error: instance is already created")
+	}
+	if cl.Wasm.Function == nil {
+		return errors.New("error: the function for the client isn't set")
+	}
+	return nil
 }
