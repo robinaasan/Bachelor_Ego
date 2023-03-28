@@ -37,7 +37,7 @@ type Runtime struct {
 	WasmStore     *wasmer.Store
 	Environment   *EnvStore
 	AllClients    AllClients
-	tlsConfig *tls.Config
+	tlsConfig     *tls.Config
 }
 
 // Handler for the client
