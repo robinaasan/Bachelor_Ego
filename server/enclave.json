@@ -8,7 +8,7 @@
  "securityVersion": 1,
  "mounts": [
         {
-            "source": "/home/stud/robin/Bachelor_Ego/server",
+            "source": "/home/robin/Bachelor_Ego/server",
             "target": "/data",
             "type": "hostfs",
             "readOnly": false

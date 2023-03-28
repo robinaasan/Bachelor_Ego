@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -12,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/edgelesssys/ego/attestation"
+	"github.com/edgelesssys/ego/eclient"
 )
 
 type Transaction struct {
@@ -35,19 +40,28 @@ type ResponsesRuntime struct {
 
 // var endpoints = []string{"http://localhost:8087", "http://localhost:8087", "http://localhost:8087"}
 
-func statusUpdate() string { return "" }
-
 func main() {
 	// setval := &SetValue{2, 1}
 
-	cl := &http.Client{}
+	uniqueID, _ := hex.DecodeString("6f299bb70a2b81dea359791fc6e8f8723e406919b455b62c73114fc4683b3e11")
+
+	verifyReport := func(report attestation.Report) error {
+		if !bytes.Equal(report.UniqueID, uniqueID) {
+			return errors.New("invalid UniqueID")
+		}
+		return nil
+	}
+	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	//client := &http.Client{}
+
 	wg := &sync.WaitGroup{}
 	waitResponses := &sync.WaitGroup{}
 	// var mu sync.Mutex
 	c := make(chan ResponsesRuntime)
 	wg.Add(1)
 
-	const orderingURL = "http://localhost:8086/Add"
+	const orderingURL = "https://localhost:8086/Add"
 	var storeResponse []string
 
 	flag.Parse()
@@ -58,10 +72,10 @@ func main() {
 
 	go func() {
 		// Create a new ticker that ticks every 1000 milliseconds
-		ticker := time.NewTicker(200 * time.Microsecond)
+		ticker := time.NewTicker(10000 * time.Microsecond)
 
 		// Create a timer that will stop the ticker after 1 second
-		timer := time.NewTimer(1 * time.Second)
+		timer := time.NewTimer(10 * time.Second)
 
 		var key, value int
 		key = 1
@@ -81,7 +95,7 @@ func main() {
 				wg.Add(1)
 				waitResponses.Add(1)
 				value++
-				go sendToRuntime(key, value, orderingURL, wg, cl, c, time.Now(), q)
+				go sendToRuntime(key, value, orderingURL, wg, client, c, time.Now(), q)
 				// fmt.Println(statusUpdate())
 			}
 		}

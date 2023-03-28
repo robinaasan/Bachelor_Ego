@@ -41,7 +41,7 @@ func (runtime *Runtime) GetNewWasmInstace(fileBytes []byte) (*wasmer.Instance, e
 			// Cast to our environment type
 			env := environment.(*EnvStore)
 			x := args[0].I32() //key
-			y := args[1].I32() //val
+			y := args[1].I32() + 1//val
 			oldVal, exists := env.Store[x]
 			// (*env).Store[x] = y
 			if exists {

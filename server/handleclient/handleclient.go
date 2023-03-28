@@ -1,11 +1,11 @@
 package handleclient
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/wasmerio/wasmer-go/wasmer"
@@ -37,6 +37,7 @@ type Runtime struct {
 	WasmStore     *wasmer.Store
 	Environment   *EnvStore
 	AllClients    AllClients
+	tlsConfig *tls.Config
 }
 
 // Handler for the client
@@ -100,21 +101,27 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string) error) 
 			return
 		}
 
-		var key, value int
-		key, err = strconv.Atoi(query.Get("key"))
+		// var key, value int
+		// key, err = strconv.Atoi(query.Get("key"))
+		// if err != nil {
+		// 	fmt.Fprintf(w, "Error: couldn't get the key\n")
+		// 	return
+		// } else {
+		// 	value, err = strconv.Atoi(query.Get("value"))
+		// 	if err != nil {
+		// 		fmt.Fprintf(w, "Error: couldn't get the value\n")
+		// 		return
+		// 	}
+		// 	fmt.Println(value)
+		// }
+		newTransAction := &Transaction{}
+		err = json.NewDecoder(r.Body).Decode(newTransAction)
 		if err != nil {
-			fmt.Fprintf(w, "Error: couldn't get the key\n")
+			fmt.Fprintf(w, "Error reading the transaction")
 			return
-		} else {
-			value, err = strconv.Atoi(query.Get("value"))
-			if err != nil {
-				fmt.Fprintf(w, "Error: couldn't get the value\n")
-				return
-			}
-			fmt.Println(value)
 		}
 		// Client use the wasmfunction
-		setvalues, err := theClient.UseWasmFunction(key, value, runtime)
+		setvalues, err := theClient.UseWasmFunction(newTransAction.Key, newTransAction.NewVal, runtime)
 		if err != nil {
 			fmt.Println(err)
 			fmt.Fprintln(w, err)
@@ -125,9 +132,8 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string) error) 
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 			return
 		}
-
 		// No error from sendToOrdering
-		// fmt.Fprintf(w, "ACK")
+		//fmt.Fprintf(w, time.Now().String())
 	}
 }
 

@@ -47,7 +47,7 @@ func main() {
 	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
 	block_chain := blockchain.InitBlockChain(time.Now().String())
-	blockSice := 10
+	blockSice := 5
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
 	if !fileExist(genBlock) {
 		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
@@ -73,7 +73,7 @@ func main() {
 // TODO: notify the runtimes about the change!
 func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		//start := time.Now()
 		newTransAction := &Transaction{}
 		err := json.NewDecoder(r.Body).Decode(newTransAction)
 		if err != nil {
@@ -121,7 +121,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerF
 			bt.allTransactions = nil
 
 		}
-		fmt.Printf("%v ms elapsed\n", time.Since(start).Microseconds())
+		//fmt.Printf("%v ms elapsed\n", time.Since(start).Microseconds())
 		// fmt.Printf("%.4fms elapsed", time.Since(start).Milliseconds())
 		// fmt.Fprintf(w, "ACK")
 		// s := fmt.Sprintf("%s", r.RemoteAddr)
