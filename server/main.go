@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 
 	"github.com/edgelesssys/ego/ecrypto"
+	"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/server/handleclient"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 	//"github.com/edgelesssys/ego/enclave"
@@ -75,18 +77,18 @@ func main() {
 	}
 
 	http.HandleFunc("/Init", runtime.InitHandler())
-	http.HandleFunc("/Add", runtime.TestSetHandler(sendToOrdering))
+	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 	http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
 	// TODO: get response from senToOrdering and call handle_callback()
 	// The function embeds ego-certificate on its own
-	// tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	server := http.Server{Addr: ":8086"}
+	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	server := http.Server{Addr: ":8086", TLSConfig: tlsConfig}
 	fmt.Println("Listening...")
-	err = server.ListenAndServe()
+	err = server.ListenAndServeTLS("", "")
 	// err = server.ListenAndServeTLS("", "")
 	if err != nil {
 		fmt.Println("Error here!", err)
