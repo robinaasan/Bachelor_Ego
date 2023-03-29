@@ -15,12 +15,13 @@ import (
 type Block struct {
 	TimeStamp string `json:"TimeStamp"`
 	Hash      []byte `json:"Hash"`
-	Data      string `json:"Data"` //will be a transaction
+	Data      []byte `json:"Data"` //will be a transaction
 	PrevHash  []byte `json:"PrevHash"`
+	SignID    []byte `json:"Signature"`
 }
 
 func (b *Block) DeriveHash() {
-	info := bytes.Join([][]byte{[]byte(b.Data), b.PrevHash}, []byte{})
+	info := bytes.Join([][]byte{b.Data, b.PrevHash}, []byte{})
 	hash := sha256.Sum256(info)
 	b.Hash = hash[:]
 }
@@ -33,14 +34,14 @@ func (b *Block) Serialize() ([]byte, error) {
 	return jsonBody, nil
 }
 
-func CreateBlock(data string, prevHash []byte, time string) *Block {
-	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash}
+func CreateBlock(data []byte, prevHash []byte, time string, signID []byte) *Block {
+	block := &Block{TimeStamp: time, Hash: []byte{}, Data: data, PrevHash: prevHash, SignID: signID}
 	block.DeriveHash()
 	return block
 }
 
-func CreateGenesis(time string) *Block {
-	return CreateBlock("Genesis", []byte{}, time)
+func CreateGenesis(time string, signID []byte) *Block {
+	return CreateBlock([]byte("Genesis"), []byte{}, time, signID)
 }
 
 func (b *Block) PrintBlock() {
@@ -48,8 +49,9 @@ func (b *Block) PrintBlock() {
 	//timeStamp, _ := time.Parse(layout, b.TimeStamp)
 	fmt.Printf("Timestamp %s\n", b.TimeStamp)
 	fmt.Printf("Prev hash: %x\n", b.PrevHash)
-	fmt.Printf("Data: %s\n", b.Data)
+	fmt.Printf("Data: %x\n", b.Data)
 	fmt.Printf("Hash: %x\n", b.Hash)
+	fmt.Printf("Signature: %x\n", b.SignID)
 	fmt.Println()
 }
 
