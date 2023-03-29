@@ -1,0 +1,17 @@
+{
+    "exe": "main",
+    "key": "private.pem",
+    "debug": true,
+    "heapSize": 512,
+    "executableHeap": true,
+    "productID": 1,
+    "securityVersion": 1,
+    "mounts": [
+        {
+            "source": "/home/azureuser/bachelor_ego/orderingservice/blockFiles",
+            "target": "/blockFiles",
+            "type": "hostfs",
+            "readOnly": false
+        }
+    ]
+}

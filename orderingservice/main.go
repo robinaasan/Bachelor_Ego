@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/blockchain"
 )
 
@@ -45,8 +46,13 @@ type BlockTransactionStore struct {
 
 func main() {
 	// TODO: verify the integrity of the blocks if there is a genesis block
+	rep, err := enclave.GetSelfReport()
+	if err != nil {
+		panic(err)
+	}
+	signature_enc := rep.SignerID
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
-	block_chain := blockchain.InitBlockChain(time.Now().String())
+	block_chain := blockchain.InitBlockChain(time.Now().String(), signature_enc)
 	blockSice := 5
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
 	if !fileExist(genBlock) {
@@ -61,17 +67,17 @@ func main() {
 		}
 	}
 	blockTransactionStore.blockchain.PrintChain()
-	http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSice))
+	http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSice, signature_enc))
 
 	server := http.Server{Addr: "localhost:8087"}
 	fmt.Println("Listening...")
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	fmt.Println(err)
 }
 
 // Add the block to the blockChain
 // TODO: notify the runtimes about the change!
-func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerFunc {
+func (bt *BlockTransactionStore) handlerTransaction(blockSice int, signature_enc []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//start := time.Now()
 		newTransAction := &Transaction{}
@@ -99,7 +105,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerF
 				return
 			}
 			// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
-			bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
+			bt.blockchain.AddNewblock(allTransactionBytes, signature_enc, time.Now().String())
 			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
 			newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
 			// fmt.Printf("%x\n", addedBlock.Hash)
@@ -230,10 +236,10 @@ func ReadAllBlockFiles(blockTransactionStore *BlockTransactionStore) error {
 		if fileType[0] == "Block1" {
 			// The genesis block was created in main
 			// Below we use the timestamp and set the same hash as is stored
-			(*blockTransactionStore).blockchain.Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp)
+			(*blockTransactionStore).blockchain.Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp, newBlock.SignID)
 			(*blockTransactionStore).blockchain.Blocks[0].Data = newBlock.Data
 		} else { // genesis block is already created in the filesystem
-			(*blockTransactionStore).blockchain.AddNewblock(newBlock.Data, newBlock.TimeStamp)
+			(*blockTransactionStore).blockchain.AddNewblock(newBlock.Data, newBlock.SignID, newBlock.TimeStamp)
 		}
 
 	}
