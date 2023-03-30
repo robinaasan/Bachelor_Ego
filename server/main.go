@@ -2,10 +2,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,13 +17,15 @@ import (
 	"github.com/edgelesssys/ego/ecrypto"
 	"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/server/handleclient"
+	"github.com/robinaasan/Bachelor_Ego/server/runtimelocalattestation"
+	"github.com/robinaasan/Bachelor_Ego/verifyreport"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 	//"github.com/edgelesssys/ego/enclave"
 )
 
 const orderingURL = "http://localhost:8087"
 
-func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
+func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string) error {
 	t := handleclient.Transaction{
 		ClientName: nameClient,
 		Key:        setvalues.Key,
@@ -39,17 +45,23 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string) error {
 	}
 	req.Header.Add("Content-Type", "application/json")
 	// req.URL.RawQuery = q.Encode()
-	runtime := &http.Client{}
-	res, err := runtime.Do(req)
+	// use the established secure channel
+	resp, err := runtimelocalattestation.HttpPost(tlsConfig, req, secureURL+"/transaction")
 	if err != nil {
+		fmt.Printf("Error sending to ordering: %v", err)
 		return err
 	}
-	defer res.Body.Close()
-	responseData, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(responseData))
+	fmt.Printf("server responded: %s\n", resp)
+	//res, err := runtime.Do(req)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer res.Body.Close()
+	// responseData, err := io.ReadAll(res.Body)
+	// if err != nil {
+	// 	return err
+	// }
+	fmt.Println(string(resp))
 	return nil
 }
 
@@ -76,17 +88,65 @@ func main() {
 		panic("Error getting the environment")
 	}
 
+	//TO ORDERINGSERVICE
+	const attestURL = "http://localhost:8087"
+	const secureURL = "https://localhost:8088"
+
+	// create client keys
+	privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pubKey := x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
+	// get server certificate over insecure channel
+	serverCert := runtimelocalattestation.HttpGet(nil, attestURL+"/cert")
+
+	// get the server's report targeted at this client
+	clientInfoReport, err := enclave.GetLocalReport(nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	serverReport := runtimelocalattestation.HttpGet(nil, attestURL+"/report", runtimelocalattestation.MakeArg("target", clientInfoReport))
+
+	// verify server certificate using the server's report
+	if err := verifyreport.VerifyReport(serverReport, serverCert); err != nil {
+		panic(err)
+	}
+
+	// request a client certificate from the server
+	pubKeyHash := sha256.Sum256(pubKey)
+	clientReport, err := enclave.GetLocalReport(pubKeyHash[:], serverReport)
+	if err != nil {
+		panic(err)
+	}
+	clientCert := runtimelocalattestation.HttpGet(nil, attestURL+"/client", runtimelocalattestation.MakeArg("pubkey", pubKey), runtimelocalattestation.MakeArg("report", clientReport))
+
+	// create mutual TLS config
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{
+			{
+				Certificate: [][]byte{clientCert},
+				PrivateKey:  privKey,
+			},
+		},
+		RootCAs: x509.NewCertPool(),
+	}
+	parsedServerCert, _ := x509.ParseCertificate(serverCert)
+	tlsConfig.RootCAs.AddCert(parsedServerCert)
+	//Set the tls config for the runtime
+	runtime.TlsConfig = tlsConfig 
+	//SECURE CHANNAL SHOULD BE ESTABLISHED
+	//ENDORDERINGSERVER
+
 	http.HandleFunc("/Init", runtime.InitHandler())
-	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering))
+	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 	http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
 	// TODO: get response from senToOrdering and call handle_callback()
 	// The function embeds ego-certificate on its own
-	tlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
-	server := http.Server{Addr: ":8086", TLSConfig: tlsConfig}
+	server := http.Server{Addr: ":8086", TLSConfig: clienttlsConfig}
 	//err = server.ListenAndServe()
 	err = server.ListenAndServeTLS("", "")
 	fmt.Println("Listening...")

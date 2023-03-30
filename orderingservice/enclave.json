@@ -1,0 +1,17 @@
+{
+    "exe": "orderingservice",
+    "key": "../private.pem",
+    "debug": true,
+    "heapSize": 512,
+    "executableHeap": true,
+    "productID": 2,
+    "securityVersion": 3,
+    "mounts": [
+        {
+            "source": "/home/robin/Bachelor_Ego/orderingservice/blockFiles",
+            "target": "/blockFiles",
+            "type": "hostfs",
+            "readOnly": false
+        }
+    ]
+}

@@ -1,4 +1,4 @@
-package localattestation
+package verifyreport
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 //cert_pubKey -> pubKey for ordering_service
 //cert_pubKey -> cert for runtime
 
-func verifyReport(reportBytes []byte, cert_pubKey []byte) error {
+func VerifyReport(reportBytes []byte, cert_pubKey []byte) error {
 	report, err := enclave.VerifyLocalReport(reportBytes)
 	if err != nil {
 		return err

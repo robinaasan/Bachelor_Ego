@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +15,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edgelesssys/ego/enclave"
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/blockchain"
+	"github.com/robinaasan/Bachelor_Ego/orderingservice/orderinglocalattestation"
+	"github.com/robinaasan/Bachelor_Ego/verifyreport"
 )
 
 const (
@@ -19,7 +26,7 @@ const (
 	genesis = "Block1.json"
 )
 
-var runtimes = []string{"http://localhost:8086/Callback", "http://localhost:8090/Callback"}
+var runtimes = []string{"http://localhost:8086/Callback"} //Can add more endpoints...
 
 // name below should be replaces by som hash later
 type Transaction struct {
@@ -41,13 +48,16 @@ type BlockTransactionStore struct {
 	allTransactions []*Transaction
 	blockchain      *blockchain.BlockChain
 	count           int
+	client          *http.Client
 }
+
+const blockSize int = 5
 
 func main() {
 	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
 	block_chain := blockchain.InitBlockChain(time.Now().String())
-	blockSice := 5
+	//blockSice := 5
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
 	if !fileExist(genBlock) {
 		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
@@ -60,13 +70,101 @@ func main() {
 			fmt.Println(err)
 		}
 	}
-	blockTransactionStore.blockchain.PrintChain()
-	http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSice))
+	// create the server certificate and the servers
+	cert, privKey := orderinglocalattestation.CreateServerCertificate()
+	attestServer := newAttestServer(cert, privKey)
+	secureServer := newSecureServer(cert, privKey, &blockTransactionStore)
 
-	server := http.Server{Addr: "localhost:8087"}
-	fmt.Println("Listening...")
-	err := server.ListenAndServe()
-	fmt.Println(err)
+	// run the servers
+
+	go func() {
+		err := attestServer.ListenAndServe()
+		panic(err)
+	}()
+
+	fmt.Println("listening ...")
+	err := secureServer.ListenAndServeTLS("", "")
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	//blockTransactionStore.blockchain.PrintChain()
+	//http.HandleFunc("/", blockTransactionStore.handlerTransaction(blockSize))
+	//server := http.Server{Addr: "localhost:8087"}
+	//err := server.ListenAndServe()
+	//fmt.Println(err)
+}
+
+func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
+	certHash := sha256.Sum256(cert)
+	mux := http.NewServeMux()
+
+	// Returns the server certificate.
+	mux.HandleFunc("/cert", func(w http.ResponseWriter, r *http.Request) { w.Write(cert) })
+
+	// Returns a local report including the server certificate's hash for the given target report.
+	mux.HandleFunc("/report", func(w http.ResponseWriter, r *http.Request) {
+		targetReport := orderinglocalattestation.GetQueryArg(w, r, "target")
+		if targetReport == nil {
+			return
+		}
+		report, err := enclave.GetLocalReport(certHash[:], targetReport)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("GetLocalReport: %v", err), http.StatusInternalServerError)
+			return
+		}
+		w.Write(report)
+	})
+
+	// Returns a client certificate for the given pubkey.
+	// The given report ensures that only verified enclaves can get certificates for their pubkeys.
+	mux.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
+		pubKey := orderinglocalattestation.GetQueryArg(w, r, "pubkey")
+		if pubKey == nil {
+			return
+		}
+		report := orderinglocalattestation.GetQueryArg(w, r, "report")
+		if report == nil {
+			return
+		}
+		if err := verifyreport.VerifyReport(report, pubKey); err != nil {
+			http.Error(w, fmt.Sprintf("verifyReport: %v", err), http.StatusBadRequest)
+			return
+		}
+		w.Write(orderinglocalattestation.CreateClientCertificate(pubKey, cert, privKey))
+	})
+
+	return &http.Server{
+		Addr:    "localhost:8087",
+		Handler: mux,
+	}
+}
+
+func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore) *http.Server {
+	mux := http.NewServeMux()
+	//mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "pong") })
+	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize))
+
+	// use server certificate also as client CA
+	parsedCert, _ := x509.ParseCertificate(cert)
+	clientCAs := x509.NewCertPool()
+	clientCAs.AddCert(parsedCert)
+
+	return &http.Server{
+		Addr:    "localhost:8088",
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{
+				{
+					Certificate: [][]byte{cert},
+					PrivateKey:  privKey,
+				},
+			},
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientCAs:  clientCAs,
+		},
+	}
 }
 
 // Add the block to the blockChain
@@ -111,8 +209,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerF
 			}
 
 			// responselist := make([]ResponsesRuntime, 1)
-			cl := &http.Client{}
-			bt.sendCallback(allTransactionBytes, runtimes, cl)
+			bt.sendCallback(allTransactionBytes, runtimes)
 			// if err != nil {
 			// 	fmt.Printf("Error: %v", err)
 			// }
@@ -128,12 +225,12 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerF
 	}
 }
 
-func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoints []string, cl *http.Client) {
+func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoints []string) {
 	// var wg sync.WaitGroup
 	c := make(chan ResponsesRuntime)
 	for _, endpoint := range endpoints {
 		bt.wg.Add(1)
-		go checkURL(endpoint, c, &bt.wg, allTransactionBytes, cl)
+		go checkURL(endpoint, c, &bt.wg, allTransactionBytes, bt.client)
 	}
 	go func() {
 		bt.wg.Wait()

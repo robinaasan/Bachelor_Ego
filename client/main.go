@@ -42,7 +42,7 @@ const (
 // var userHash []byte
 
 func main() {
-	uniqueID, _ := hex.DecodeString("6f299bb70a2b81dea359791fc6e8f8723e406919b455b62c73114fc4683b3e11")
+	uniqueID, _ := hex.DecodeString("94541bd9bc3570e4e7486d7dbea6a9f6f9c535f3d938ec776a7eb89084f43a84")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
