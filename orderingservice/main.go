@@ -220,7 +220,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerF
 		}
 		//fmt.Printf("%v ms elapsed\n", time.Since(start).Microseconds())
 		// fmt.Printf("%.4fms elapsed", time.Since(start).Milliseconds())
-		// fmt.Fprintf(w, "ACK")
+		fmt.Fprintf(w, "ACK")
 		// s := fmt.Sprintf("%s", r.RemoteAddr)
 	}
 }
