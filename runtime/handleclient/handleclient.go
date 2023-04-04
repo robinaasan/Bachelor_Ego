@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/robinaasan/Bachelor_Ego/runtime/runtimelocalattestation"
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
 
@@ -183,19 +184,24 @@ func (runtime *Runtime) TestSetHandler(sendToOrdering func(SetValue, string) err
 	}
 }
 
-func (runtime *Runtime) Handle_callback(mustSaveState func(*EnvStore) error) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		callback := &Callback{}
-		err := json.NewDecoder(r.Body).Decode(&callback.CallbackList)
-		if err != nil {
-			fmt.Fprintf(w, "Error: decoding the data")
-			return
-		}
-		// fmt.Printf("%+v", *callback.CallbackList[0])
-		// fmt.Fprintf(w, "OK")
-
-		runtime.setTransactionsInEnvironment(mustSaveState, callback)
+func (runtime *Runtime) Handle_callback(mustSaveState func(*EnvStore) error, endpoint string) error {
+	body := runtimelocalattestation.HttpGet(runtime.TlsConfig, endpoint)
+	callback := &Callback{}
+	err := json.Unmarshal(body, &callback.CallbackList)
+	
+	//err := json.NewDecoder(r.Body).Decode(&callback.CallbackList)
+	if err != nil {
+		return err
 	}
+	// fmt.Printf("%+v", *callback.CallbackList[0])
+	// fmt.Fprintf(w, "OK")
+
+	err = runtime.setTransactionsInEnvironment(mustSaveState, callback)
+	if err != nil {
+		return err
+	}
+	runtime.Handle_callback(mustSaveState, endpoint)
+	return nil
 }
 
 func (runtime *Runtime) setTransactionsInEnvironment(mustSaveState func(*EnvStore) error, c *Callback) error {

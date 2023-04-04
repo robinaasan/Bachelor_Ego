@@ -23,8 +23,6 @@ import (
 	//"github.com/edgelesssys/ego/enclave"
 )
 
-const orderingURL = "http://localhost:8087"
-
 func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string) error {
 	t := handleclient.Transaction{
 		ClientName: nameClient,
@@ -134,13 +132,16 @@ func main() {
 	tlsConfig.RootCAs.AddCert(parsedServerCert)
 	//Set the tls config for the runtime
 	runtime.TlsConfig = tlsConfig
+	//TODO: 
 	//SECURE CHANNAL SHOULD BE ESTABLISHED
+	//WAIT FOR ALL TRANSACTIONS:
+	runtime.Handle_callback(mustSaveState, secureURL+"/Callback")
 	//ENDORDERINGSERVER
-
 	http.HandleFunc("/Init", runtime.InitHandler())
 	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
-	http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
+	//http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
+	
 	// TODO: get response from senToOrdering and call handle_callback()
 	// The function embeds ego-certificate on its own
 	clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()
