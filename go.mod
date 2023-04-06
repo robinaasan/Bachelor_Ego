@@ -14,4 +14,5 @@ require (
 require (
 	github.com/benpate/convert v0.13.5
 	github.com/edgelesssys/ego v1.1.0
+	github.com/gorilla/websocket v1.5.0
 )

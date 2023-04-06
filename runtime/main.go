@@ -13,9 +13,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/edgelesssys/ego/ecrypto"
 	"github.com/edgelesssys/ego/enclave"
+	"github.com/gorilla/websocket"
 	"github.com/robinaasan/Bachelor_Ego/runtime/handleclient"
 	"github.com/robinaasan/Bachelor_Ego/runtime/runtimelocalattestation"
 	"github.com/robinaasan/Bachelor_Ego/verifyreport"
@@ -23,7 +25,7 @@ import (
 	//"github.com/edgelesssys/ego/enclave"
 )
 
-func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string) error {
+func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
 	t := handleclient.Transaction{
 		ClientName: nameClient,
 		Key:        setvalues.Key,
@@ -45,22 +47,39 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfi
 
 	// req.URL.RawQuery = q.Encode()
 	// use the established secure channel
-	resp, err := runtimelocalattestation.HttpPost(tlsConfig, jsonBody, secureURL+"/transaction")
+
+	
+	err = conn.WriteMessage(websocket.TextMessage, jsonBody)
+
 	if err != nil {
-		fmt.Printf("Error sending to ordering: %v", err)
+		log.Println("Write error:", err)
 		return err
 	}
-	fmt.Printf("server responded: %s\n", resp)
-	//res, err := runtime.Do(req)
+	// Read message from server
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		log.Println("Read error:", err)
+		return err
+	}
+
+	// Print received message
+	fmt.Printf("Received message: %s\n", message)
+	// resp, err := runtimelocalattestation.HttpPost(tlsConfig, jsonBody, secureURL+"/transaction")
 	// if err != nil {
+	// 	fmt.Printf("Error sending to ordering: %v", err)
 	// 	return err
 	// }
-	// defer res.Body.Close()
-	// responseData, err := io.ReadAll(res.Body)
-	// if err != nil {
-	// 	return err
-	// }
-	fmt.Println(string(resp))
+	// fmt.Printf("server responded: %s\n", resp)
+	// //res, err := runtime.Do(req)
+	// // if err != nil {
+	// // 	return err
+	// // }
+	// // defer res.Body.Close()
+	// // responseData, err := io.ReadAll(res.Body)
+	// // if err != nil {
+	// // 	return err
+	// // }
+	// fmt.Println(string(resp))
 	return nil
 }
 
@@ -76,11 +95,11 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfi
 func main() {
 	eng := wasmer.NewEngine()
 	runtime := &handleclient.Runtime{
-		RuntimeClient: &http.Client{},
-		Engine:        eng,
-		WasmStore:     wasmer.NewStore(eng),
-		Environment:   &handleclient.EnvStore{Store: make(map[int32]int32)},
-		AllClients:    make(map[string]*handleclient.Client),
+		SecureRuntimeClient: &http.Client{},
+		Engine:              eng,
+		WasmStore:           wasmer.NewStore(eng),
+		Environment:         &handleclient.EnvStore{Store: make(map[int32]int32)},
+		AllClients:          make(map[string]*handleclient.Client),
 	}
 	err := loadState(runtime.Environment)
 	if err != nil {
@@ -89,7 +108,7 @@ func main() {
 
 	//TO ORDERINGSERVICE
 	var attestURL = "http://localhost:8087"
-	var secureURL = "https://localhost:8088"
+	var secureURL = "wss://localhost:443"
 
 	// create client keys
 	privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
@@ -131,17 +150,36 @@ func main() {
 	parsedServerCert, _ := x509.ParseCertificate(serverCert)
 	tlsConfig.RootCAs.AddCert(parsedServerCert)
 	//Set the tls config for the runtime
-	runtime.TlsConfig = tlsConfig
-	//TODO: 
+
+	tr := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+
+	runtime.SecureRuntimeClient.Transport = tr
+	runtime.SecureRuntimeClient.Timeout = time.Second * 10
+	
+	dialer := websocket.DefaultDialer
+	dialer.TLSClientConfig = tlsConfig
+
+	conn, _, err := websocket.DefaultDialer.Dial(secureURL+"/transaction", nil)
+	if err != nil {
+		panic("something wrong with websocket!")
+	}
+	runtime.SocketConnectionToOrdering = conn
+
+	//TODO:
 	//SECURE CHANNAL SHOULD BE ESTABLISHED
 	//WAIT FOR ALL TRANSACTIONS:
-	runtime.Handle_callback(mustSaveState, secureURL+"/Callback")
+	// go func() {
+	// 	err := runtime.Handle_callback(mustSaveState, secureURL+"/callback")
+	// 	panic(err)
+	// }()
 	//ENDORDERINGSERVER
 	http.HandleFunc("/Init", runtime.InitHandler())
 	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 	//http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
-	
+
 	// TODO: get response from senToOrdering and call handle_callback()
 	// The function embeds ego-certificate on its own
 	clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()

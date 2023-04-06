@@ -42,7 +42,7 @@ const (
 // var userHash []byte
 
 func main() {
-	uniqueID, _ := hex.DecodeString("8a67968fdcb58d023beae49275c1c87f20007fdcb433dac74224e019598bd6ee")
+	uniqueID, _ := hex.DecodeString("139616f82cbc3b459456e95a669ba4b23da744159cb23b869164be9ce7cce88d")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -80,7 +80,7 @@ func runTerminalCommands(client *http.Client) error {
 			return err
 		}
 	case "SET":
-		if len(args) < 4 {
+		if len(args) < 3 {
 			panic(usage_set)
 		}
 		q.Add("cmd", "SET")

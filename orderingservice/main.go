@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto"
 	"crypto/sha256"
 	"crypto/tls"
@@ -16,25 +15,18 @@ import (
 	"time"
 
 	"github.com/edgelesssys/ego/enclave"
+	"github.com/gorilla/websocket"
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/blockchain"
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/orderinglocalattestation"
+	"github.com/robinaasan/Bachelor_Ego/orderingservice/runtimeclients"
 	"github.com/robinaasan/Bachelor_Ego/verifyreport"
 )
 
 const (
-	PATH    = "./blockFiles/"
-	genesis = "Block1.json"
+	PATH      = "./blockFiles/"
+	genesis   = "Block1.json"
+	blockSize = 5
 )
-
-var runtimes = []string{"http://localhost:8086/Callback"} //Can add more endpoints...
-
-// name below should be replaces by som hash later
-type Transaction struct {
-	Key        int    `json:"Key"`
-	NewVal     int    `json:"NewVal"`
-	OldVal     int    `json:"OldVal"`
-	ClientName string `json:"ClientName"`
-}
 
 type ResponsesRuntime struct {
 	response string
@@ -43,21 +35,32 @@ type ResponsesRuntime struct {
 }
 
 type BlockTransactionStore struct {
-	wg sync.WaitGroup
-	sync.Mutex
-	allTransactions []*Transaction
-	blockchain      *blockchain.BlockChain
-	count           int
-	client          *http.Client
+	allTransactions      []runtimeclients.Transaction
+	blockchain           *blockchain.BlockChain
+	count                int
+	client               *http.Client
+	runtime_clients      []runtimeclients.Runtimeclient
+	dataToSendInCallback []byte
+	mu                   *sync.Mutex
 }
 
-const blockSize int = 5
+// type handleConcurrentRequests struct {
+// 	mu          sync.Mutex
+// 	wg          sync.WaitGroup
+// 	cond        *sync.Cond
+// 	runCallback bool
+// }
 
 func main() {
 	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis)
 	block_chain := blockchain.InitBlockChain(time.Now().String())
 	//blockSice := 5
+	//create the condition in handleConcurrentRequest
+	//handleConcurrentRequests := handleConcurrentRequests{}
+	//handleConcurrentRequests.cond = sync.NewCond(&handleConcurrentRequests.mu)
+
+	//create the blocktransactionstore
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
 	if !fileExist(genBlock) {
 		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
@@ -73,10 +76,19 @@ func main() {
 	// create the server certificate and the servers
 	cert, privKey := orderinglocalattestation.CreateServerCertificate()
 	attestServer := newAttestServer(cert, privKey)
-	secureServer := newSecureServer(cert, privKey, &blockTransactionStore)
+	//create upgrader for websocket
+	var upgrader = &websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+	blockTransactionStore.runtime_clients = []runtimeclients.Runtimeclient{}
+
+	createdBlock := make(chan []byte)
+	go blockTransactionStore.waitForBlockFromTransactions(createdBlock)
+	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, createdBlock)
 
 	// run the servers
-
 	go func() {
 		err := attestServer.ListenAndServe()
 		panic(err)
@@ -141,18 +153,18 @@ func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
 	}
 }
 
-func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore) *http.Server {
+func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore, upgrader *websocket.Upgrader, createdBlock chan []byte) *http.Server {
 	mux := http.NewServeMux()
 	//mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "pong") })
-	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize))
-
+	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize, upgrader, createdBlock))
+	//mux.HandleFunc("/callback", bt.handlerCallback())
 	// use server certificate also as client CA
 	parsedCert, _ := x509.ParseCertificate(cert)
 	clientCAs := x509.NewCertPool()
 	clientCAs.AddCert(parsedCert)
 
 	return &http.Server{
-		Addr:    "localhost:8088",
+		Addr:    "localhost:443",
 		Handler: mux,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{
@@ -169,116 +181,85 @@ func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactio
 
 // Add the block to the blockChain
 // TODO: notify the runtimes about the change!
-func (bt *BlockTransactionStore) handlerTransaction(blockSice int) http.HandlerFunc {
+func (bt *BlockTransactionStore) handlerTransaction(blockSice int, upgrader *websocket.Upgrader, createdBlock chan []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//start := time.Now()
-		newTransAction := &Transaction{}
-		err := json.NewDecoder(r.Body).Decode(newTransAction)
+
+		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			fmt.Fprintf(w, "Error reading the transaction")
+			fmt.Println("Error upgrading websocket:", err)
 			return
 		}
-		// fmt.Printf("%+v", newTransAction)
-		if err != nil {
-			fmt.Fprintf(w, "Error transforming the transaction")
-			return
+		//defer conn.Close()
+		newClient := &runtimeclients.Runtimeclient{
+			Conn: conn,
+			Send: make(chan []byte),
 		}
-		bt.Lock()
-		defer bt.Unlock()
+		bt.runtime_clients = append(bt.runtime_clients, *newClient)
 
-		bt.allTransactions = append(bt.allTransactions, newTransAction)
-		bt.count++
-		if bt.count == blockSice {
+		// start a goroutine to handle receiving messages from this client
 
-			bt.count = 0
-			allTransactionBytes, err := json.Marshal(bt.allTransactions)
-			if err != nil {
-				fmt.Fprintf(w, "Error: decoding the transaction went wrong")
-				return
-			}
-			// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
-			bt.blockchain.AddNewblock(allTransactionBytes, time.Now().String())
-			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
-			newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
-			// fmt.Printf("%x\n", addedBlock.Hash)
-			// fmt.Println(newBlockFileName)
-			err = addBlockFile(newBlockFileName, addedBlock)
-			if err != nil {
-				fmt.Fprintf(w, "Error adding the block in the blockchain")
-				return
-			}
+		//go newClient.ReadPump(bt.count, mu, &bt.allTransactions, createdBlock)
 
-			// responselist := make([]ResponsesRuntime, 1)
-			bt.sendCallback(allTransactionBytes, runtimes)
-			// if err != nil {
-			// 	fmt.Printf("Error: %v", err)
-			// }
+		go newClient.ReadPump(bt.count, &bt.allTransactions, createdBlock)
 
-			// new rquest to every runtime connected with x new transactions
-			bt.allTransactions = nil
+		go newClient.WritePump()
+		// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)
+		fmt.Println("Ready for callback")
+		// for {
+		// 	_, msg, err := conn.ReadMessage()
 
-		}
+		// 	bt.handleConcurrentRequests.mu.Unlock()
+
+		// }
 		//fmt.Printf("%v ms elapsed\n", time.Since(start).Microseconds())
 		// fmt.Printf("%.4fms elapsed", time.Since(start).Milliseconds())
-		fmt.Fprintf(w, "ACK")
+		//fmt.Fprintf(w, "ACK")
 		// s := fmt.Sprintf("%s", r.RemoteAddr)
 	}
 }
 
-func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoints []string) {
-	// var wg sync.WaitGroup
-	c := make(chan ResponsesRuntime)
-	for _, endpoint := range endpoints {
-		bt.wg.Add(1)
-		go checkURL(endpoint, c, &bt.wg, allTransactionBytes, bt.client)
+func (bt *BlockTransactionStore) waitForBlockFromTransactions(createdBlockbytes chan []byte) {
+	//c := <- createdBlockbytes
+	for {
+		select {
+		case c := <-createdBlockbytes:
+			bt.blockchain.AddNewblock(c, time.Now().String())
+			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+			newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
+			err := addBlockFile(newBlockFileName, addedBlock)
+			if err != nil {
+				//TODO: handle error
+				return
+			}
+			fmt.Println("Should broadcast...")
+			runtimeclients.BroadcastMessage(c, bt.runtime_clients)
+		}
 	}
-	go func() {
-		bt.wg.Wait()
-		close(c)
-	}()
-
-	// for r := range c {
-	// 	// if r.err != nil {
-
-	// 	// 	s := fmt.Sprintf("Error: endpoint: %s got: %v\n", r.endpoint, r.err)
-	// 	// 	fmt.Printf("%v", s)
-	// 	// } else {
-	// 	// 	fmt.Println(r.response + "\n")
-	// 	// }
-
-	// 	// if r.err != nil {
-	// 	// 	fmt.Printf("Error requesting %s: %v\n", r.endpoint, r.err)
-	// 	// 	continue
-	// 	// }
-	// 	fmt.Printf("%+v\n", r)
-	// }
 }
 
-func checkURL(endpoint string, c chan ResponsesRuntime, wg *sync.WaitGroup, allTransactionBytes []byte, cl *http.Client) {
-	defer (*wg).Done()
+// func (bt *BlockTransactionStore) handlerCallback() http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		//wait for the block to be created
+// 		bt.handleConcurrentRequests.cond.L.Lock()
+// 		//for !bt.handleConcurrentRequests.runCallback {
+// 		fmt.Println("waiting for the flag to be set to true...")
+// 		bt.handleConcurrentRequests.cond.Wait()
+// 		//}
+// 		//bt.handleConcurrentRequests.mu.Lock()
+// 		fmt.Println("Sending back block...")
+// 		_, err := w.Write(bt.dataToSendInCallback)
+// 		if err != nil {
+// 			panic("Error sending the data to runtimes")
+// 		}
+// 		//bt.handleConcurrentRequests.mu.Unlock()
+// 		//bt.handleConcurrentRequests.runCallback = false
+// 		bt.handleConcurrentRequests.cond.L.Unlock()
 
-	// responseruntime := ResponsesRuntime{endpoint: endpoint}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(allTransactionBytes))
-	// if err != nil {
-	// 	s = err.Error()
-	// }
-	if err != nil {
-		c <- ResponsesRuntime{endpoint, "", err}
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
+// 		//respond with the block generated
 
-	res, err := cl.Do(req)
-	if err != nil {
-		c <- ResponsesRuntime{endpoint, "", err}
-		return
-	}
-	defer res.Body.Close()
-	// resBody, err := io.ReadAll(res.Body)
-
-	// fmt.Printf("Res: %v", string(resBody))
-	c <- ResponsesRuntime{endpoint, res.Status, nil}
-}
+// 	}
+// }
 
 // Add the block as a json file in the filesystem
 func addBlockFile(filename string, b *blockchain.Block) error {
@@ -336,3 +317,58 @@ func ReadAllBlockFiles(blockTransactionStore *BlockTransactionStore) error {
 	}
 	return nil
 }
+
+// func (bt *BlockTransactionStore) sendCallback(allTransactionBytes []byte, endpoints []string) {
+// 	// var wg sync.WaitGroup
+// 	c := make(chan ResponsesRuntime)
+// 	for _, endpoint := range endpoints {
+// 		bt.handleConcurrentRequests.wg.Add(1)
+// 		go checkURL(endpoint, c, &bt.handleConcurrentRequests.wg, allTransactionBytes, bt.client)
+// 	}
+// 	go func() {
+// 		bt.handleConcurrentRequests.wg.Wait()
+// 		close(c)
+// 	}()
+
+// 	// for r := range c {
+// 	// 	// if r.err != nil {
+
+// 	// 	// 	s := fmt.Sprintf("Error: endpoint: %s got: %v\n", r.endpoint, r.err)
+// 	// 	// 	fmt.Printf("%v", s)
+// 	// 	// } else {
+// 	// 	// 	fmt.Println(r.response + "\n")
+// 	// 	// }
+
+// 	// 	// if r.err != nil {
+// 	// 	// 	fmt.Printf("Error requesting %s: %v\n", r.endpoint, r.err)
+// 	// 	// 	continue
+// 	// 	// }
+// 	// 	fmt.Printf("%+v\n", r)
+// 	// }
+// }
+
+// func checkURL(endpoint string, c chan ResponsesRuntime, wg *sync.WaitGroup, allTransactionBytes []byte, cl *http.Client) {
+// 	defer (*wg).Done()
+
+// 	// responseruntime := ResponsesRuntime{endpoint: endpoint}
+// 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(allTransactionBytes))
+// 	// if err != nil {
+// 	// 	s = err.Error()
+// 	// }
+// 	if err != nil {
+// 		c <- ResponsesRuntime{endpoint, "", err}
+// 		return
+// 	}
+// 	req.Header.Set("Content-Type", "application/json")
+
+// 	res, err := cl.Do(req)
+// 	if err != nil {
+// 		c <- ResponsesRuntime{endpoint, "", err}
+// 		return
+// 	}
+// 	defer res.Body.Close()
+// 	// resBody, err := io.ReadAll(res.Body)
+
+// 	// fmt.Printf("Res: %v", string(resBody))
+// 	c <- ResponsesRuntime{endpoint, res.Status, nil}
+// }

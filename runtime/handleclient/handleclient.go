@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/robinaasan/Bachelor_Ego/runtime/runtimelocalattestation"
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -34,12 +35,13 @@ type EnvStore struct {
 
 type Runtime struct {
 	sync.Mutex
-	RuntimeClient *http.Client
+	SecureRuntimeClient *http.Client
 	Engine        *wasmer.Engine
 	WasmStore     *wasmer.Store
 	Environment   *EnvStore
 	AllClients    AllClients
 	TlsConfig     *tls.Config
+	SocketConnectionToOrdering *websocket.Conn
 }
 
 // Handler for the client
@@ -83,7 +85,7 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 	}
 }
 
-func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Config, string) error, secureURL string) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		runtime.Lock()
 		defer runtime.Unlock()
@@ -129,7 +131,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Co
 			fmt.Fprintln(w, err)
 			return
 		}
-		err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL)
+		err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
 		if err != nil {
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 			return
@@ -188,12 +190,11 @@ func (runtime *Runtime) Handle_callback(mustSaveState func(*EnvStore) error, end
 	body := runtimelocalattestation.HttpGet(runtime.TlsConfig, endpoint)
 	callback := &Callback{}
 	err := json.Unmarshal(body, &callback.CallbackList)
-	
+
 	//err := json.NewDecoder(r.Body).Decode(&callback.CallbackList)
 	if err != nil {
 		return err
 	}
-	// fmt.Printf("%+v", *callback.CallbackList[0])
 	// fmt.Fprintf(w, "OK")
 
 	err = runtime.setTransactionsInEnvironment(mustSaveState, callback)
