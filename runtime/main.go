@@ -26,17 +26,17 @@ import (
 )
 
 type Transaction struct {
-	Key        int    `json:"Key"`
-	NewVal     int    `json:"NewVal"`
-	OldVal     int    `json:"OldVal"`
-	ClientName string `json:"ClientName"`
+	Key        int   
+	NewVal     int    
+	OldVal     int    
+	ClientName string 
 }
 
 type Callback struct {
 	CallbackList []*Transaction
 }
 
-func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
+func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
 	t := Transaction{
 		ClientName: nameClient,
 		Key:        setvalues.Key,

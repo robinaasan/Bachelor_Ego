@@ -13,10 +13,6 @@ import (
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
 
-// type HashResponse struct {
-// 	Hash []byte `json:"Hash"`
-// }
-
 type EnvStore struct {
 	Store map[int32]int32
 }
@@ -37,6 +33,12 @@ func (runtime *Runtime) InitHandler(WaitForOrderingMessages func(*websocket.Conn
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		client_name := query.Get("username")
+		_, err := GetClient([]byte(client_name), runtime.AllClients)
+		if err == nil {
+			fmt.Fprint(w, "This client already exists")
+			return
+		}
+
 		new_client := NewClient(client_name)
 		runtime.AllClients[string(new_client.Hash)] = new_client
 
@@ -59,23 +61,32 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 
 		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
 		if err != nil {
-			fmt.Fprintf(w, "Error: couldn't find that client")
+			fmt.Fprintf(w, "Error: couldn't find the client")
 			return
 		}
-		err = theClient.GetWasmFile(r)
+
+		if len(theClient.Wasm_file.File) != 0 {
+			fmt.Fprint(w, "Reuploading the wasm module...")
+		}
+
+		// set the wasm module
+		err = theClient.SetWasmFile(r)
 		if err != nil {
 			fmt.Fprint(w, err.Error())
 			return
 		}
+
+		// create the instance for the vendor
 		err = theClient.CreateInstanceClient(runtime)
 		if err != nil {
 			fmt.Fprint(w, err.Error())
+		} else {
+			fmt.Fprint(w, "ACK")
 		}
-		fmt.Fprint(w, "ACK")
 	}
 }
 
-func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		runtime.Lock()
 		defer runtime.Unlock()
@@ -83,6 +94,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Co
 		client_name := query.Get("username")
 		if client_name == "" {
 			fmt.Fprintf(w, "Error: didn't get any username\n")
+			return
 		}
 		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
 		if err != nil {
@@ -106,7 +118,6 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Co
 				fmt.Fprintf(w, "Error: couldn't get the value\n")
 				return
 			}
-			fmt.Println(value)
 		}
 		// newTransAction := &Transaction{}
 		// err = json.NewDecoder(r.Body).Decode(newTransAction)
@@ -208,7 +219,8 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Co
 // 	return nil
 // }
 
-func (cl *Client) GetWasmFile(r *http.Request) error {
+// set the wasm module to the client
+func (cl *Client) SetWasmFile(r *http.Request) error {
 	wasmfile := cl.Wasm_file
 	err := json.NewDecoder(r.Body).Decode(wasmfile)
 	if err != nil {

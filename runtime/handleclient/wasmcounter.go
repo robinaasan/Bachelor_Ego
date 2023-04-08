@@ -4,7 +4,7 @@ import (
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
-//Epporting struct for holding the wasmer instance and function
+// struct for holding the wasmer instance and function
 type WasmerGO struct {
 	Instance *wasmer.Instance
 	Function *wasmer.Function
@@ -14,8 +14,8 @@ func NewWasmerGO() *WasmerGO {
 	return &WasmerGO{}
 }
 
-// function that takes as paramters: *wasmer.Engine, *environment, []byte with wasm module,
-// return the instance
+// Create a new wasmer instance for a client. 
+//Wasmmodule given as param.
 //Link: https://wasmer.io/posts/wasmer-go-embedding-1.0
 func (runtime *Runtime) GetNewWasmInstace(fileBytes []byte) (*wasmer.Instance, error) {
 	// Create a new module from some WebAssembly in its text representation
@@ -51,7 +51,7 @@ func (runtime *Runtime) GetNewWasmInstace(fileBytes []byte) (*wasmer.Instance, e
 		},
 	)
 
-	// Let's use the new `ImportObject` API…
+	// use the new `ImportObject` API…
 	importObject := wasmer.NewImportObject()
 	//… to register the `math.set` function.
 	importObject.Register(

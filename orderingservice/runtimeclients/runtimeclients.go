@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
 type Runtimeclient struct {
-	Conn *websocket.Conn
-	Send chan []byte
-	mu   *sync.Mutex
+	Conn *websocket.Conn // Websocket connection for each runtime
+	Send chan []byte     // Message channel for each client
 }
 
-// name below should be replaces by som hash later
+// Struct for getting the transaction from the runtimes
 type Transaction struct {
 	Key        int    `json:"Key"`
 	NewVal     int    `json:"NewVal"`
@@ -24,67 +22,65 @@ type Transaction struct {
 }
 
 // goroutine to handle sending messages to a single client
-func (cl *Runtimeclient) WritePump() {
+func (rc *Runtimeclient) WritePump() {
 	for {
 		select {
-		case message, ok := <-cl.Send:
+		case message, ok := <-rc.Send:
 			if !ok {
 				// channel closed, client disconnected
 				return
 			}
-			err := cl.Conn.WriteMessage(websocket.TextMessage, message)
+			err := rc.Conn.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				// handle error
+				panic("Couldn't send message on the websocket")
 			}
 		}
 	}
 }
 
-// goroutine to handle receiving messages from a single client
-func (cl *Runtimeclient) ReadPump(allTransactions *[]Transaction, createdBlock chan []byte) {
+// goroutine to handle receiving messages from a single runtime
+func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]Transaction, createdBlock chan []byte) {
 	var count int
 	for {
-		_, message, err := cl.Conn.ReadMessage()
+		_, message, err := rc.Conn.ReadMessage()
 		if err != nil {
 			log.Println(err)
 			break
 		}
+		
 		newTransAction := &Transaction{}
 		err = json.Unmarshal(message, newTransAction)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		//cl.mu.Lock()
+		
 		count++
 		(*allTransactions) = append((*allTransactions), *newTransAction)
-		fmt.Printf("%+v\n", newTransAction)
-		if count >= 2 {
+		fmt.Printf("%+v\n", newTransAction) //TODO: remove
+		if count >= blockSize {
 			count = 0
 			allTransactionBytes, err := json.Marshal(allTransactions)
 			if err != nil {
-				//TODO:handle error
+				log.Println(err)
 				return
 			}
 			createdBlock <- allTransactionBytes
 			(*allTransactions) = []Transaction{}
-			//allTransactions = nil
 		}
-
-		//cl.mu.Unlock()
-		//err = conn.WriteMessage(websocket.TextMessage, []byte("ACK"))
-		cl.Send <- []byte("ACK")
+		rc.Send <- []byte("ACK")
 	}
 }
 
-// send a message to all connected clients
+// send a message to all connected runtimez
 func BroadcastMessage(message []byte, allruntimeclients []Runtimeclient) {
 	for _, client := range allruntimeclients {
 		select {
 		case client.Send <- message:
 			fmt.Println(string(message))
 		default:
-			// handle error (client disconnected)
+			// TODO: handle error (runtmime disconnected)
+			log.Println("Check when this runs")
 		}
 	}
 }

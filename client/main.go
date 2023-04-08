@@ -27,22 +27,9 @@ const (
 	initEndPoint   = "https://localhost:8086/Init"
 )
 
-// type Client struct {
-// 	c    *http.Client
-// 	name string
-// }
-
-// func NewClient() *Client {
-// 	c := &http.Client{}
-// 	return &Client{
-// 		c:    c,
-// 		name: "Robs",
-// 	}
-// }
-// var userHash []byte
-
 func main() {
-	uniqueID, _ := hex.DecodeString("45776e6c7c2e0b064ba60ca5a318a5b1a612dd9aad33ea416671da53f8abbd66")
+	fmt.Println(os.Getenv("uniqueid"))
+	uniqueID, _ := hex.DecodeString("7901895e949dfee84db7098eb7f57ccbd735427d800b5981f74c58994eb79d29")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {

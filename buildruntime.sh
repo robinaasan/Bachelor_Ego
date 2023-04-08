@@ -11,6 +11,8 @@ CGO_CFLAGS="-I$PWD/wasmer/include" CGO_LDFLAGS="$PWD/wasmer/lib/libwasmer.a -ldl
 
 wait
 ego sign runtime
+# uniqueid=$(ego uniqueid runtime)
+# export UNIQUEID=$uniqueid 
 ego uniqueid runtime
 cd ..
 exec bash

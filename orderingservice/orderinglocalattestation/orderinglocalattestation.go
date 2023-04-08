@@ -13,24 +13,6 @@ import (
 	"time"
 )
 
-// func main() {
-// 	// create the server certificate and the servers
-// 	cert, privKey := createServerCertificate()
-// 	attestServer := newAttestServer(cert, privKey)
-// 	secureServer := newSecureServer(cert, privKey)
-
-// 	// run the servers
-
-// 	go func() {
-// 		err := attestServer.ListenAndServe()
-// 		panic(err)
-// 	}()
-
-// 	fmt.Println("listening ...")
-// 	err := secureServer.ListenAndServeTLS("", "")
-// 	fmt.Println(err)
-// }
-
 func CreateServerCertificate() ([]byte, crypto.PrivateKey) {
 	template := &x509.Certificate{
 		SerialNumber:          &big.Int{},
