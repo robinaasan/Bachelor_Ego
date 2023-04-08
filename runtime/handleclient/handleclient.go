@@ -10,24 +10,12 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/robinaasan/Bachelor_Ego/runtime/runtimelocalattestation"
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
 
-type HashResponse struct {
-	Hash []byte `json:"Hash"`
-}
-
-type Transaction struct {
-	Key        int    `json:"Key"`
-	NewVal     int    `json:"NewVal"`
-	OldVal     int    `json:"OldVal"`
-	ClientName string `json:"ClientName"`
-}
-
-type Callback struct {
-	CallbackList []*Transaction
-}
+// type HashResponse struct {
+// 	Hash []byte `json:"Hash"`
+// }
 
 type EnvStore struct {
 	Store map[int32]int32
@@ -35,17 +23,17 @@ type EnvStore struct {
 
 type Runtime struct {
 	sync.Mutex
-	SecureRuntimeClient *http.Client
-	Engine        *wasmer.Engine
-	WasmStore     *wasmer.Store
-	Environment   *EnvStore
-	AllClients    AllClients
-	TlsConfig     *tls.Config
+	SecureRuntimeClient        *http.Client
+	Engine                     *wasmer.Engine
+	WasmStore                  *wasmer.Store
+	Environment                *EnvStore
+	AllClients                 AllClients
+	TlsConfig                  *tls.Config
 	SocketConnectionToOrdering *websocket.Conn
 }
 
 // Handler for the client
-func (runtime *Runtime) InitHandler() http.HandlerFunc {
+func (runtime *Runtime) InitHandler(WaitForOrderingMessages func(*websocket.Conn, *EnvStore)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		client_name := query.Get("username")
@@ -54,6 +42,8 @@ func (runtime *Runtime) InitHandler() http.HandlerFunc {
 
 		fmt.Printf("Createt client with 'hash': %s\n", new_client.Hash)
 		fmt.Fprint(w, "ACK")
+
+		go WaitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment)
 	}
 }
 
@@ -141,82 +131,82 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(SetValue, string, *tls.Co
 	}
 }
 
-func (runtime *Runtime) TestSetHandler(sendToOrdering func(SetValue, string) error) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		runtime.Lock()
-		defer runtime.Unlock()
-		query := r.URL.Query()
-		client_name := query.Get("username")
-		if client_name == "" {
-			fmt.Fprintf(w, "Error: didn't get any username\n")
-		}
-		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
-		if err != nil {
-			fmt.Fprintf(w, "Error: getting the client\n")
-			return
-		}
+// func (runtime *Runtime) TestSetHandler(sendToOrdering func(SetValue, string) error) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		runtime.Lock()
+// 		defer runtime.Unlock()
+// 		query := r.URL.Query()
+// 		client_name := query.Get("username")
+// 		if client_name == "" {
+// 			fmt.Fprintf(w, "Error: didn't get any username\n")
+// 		}
+// 		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
+// 		if err != nil {
+// 			fmt.Fprintf(w, "Error: getting the client\n")
+// 			return
+// 		}
 
-		if !theClient.WasmFileExist() {
-			fmt.Fprintf(w, "Error: now wasm module uploaded")
-			return
-		}
+// 		if !theClient.WasmFileExist() {
+// 			fmt.Fprintf(w, "Error: now wasm module uploaded")
+// 			return
+// 		}
 
-		newTransAction := &Transaction{}
-		err = json.NewDecoder(r.Body).Decode(newTransAction)
-		if err != nil {
-			fmt.Fprintf(w, "Error reading the transaction")
-			return
-		}
-		// Client use the wasmfunction
-		fmt.Println(newTransAction.NewVal)
-		setvalues, err := theClient.UseWasmFunction(newTransAction.Key, newTransAction.NewVal, runtime)
-		if err != nil {
-			fmt.Println(err)
-			fmt.Fprintln(w, err)
-			return
-		}
-		err = sendToOrdering(setvalues, string(theClient.Hash))
-		if err != nil {
-			fmt.Printf("Error sending to orderingservice: %s", err.Error())
-			return
-		}
+// 		newTransAction := &Transaction{}
+// 		err = json.NewDecoder(r.Body).Decode(newTransAction)
+// 		if err != nil {
+// 			fmt.Fprintf(w, "Error reading the transaction")
+// 			return
+// 		}
+// 		// Client use the wasmfunction
+// 		fmt.Println(newTransAction.NewVal)
+// 		setvalues, err := theClient.UseWasmFunction(newTransAction.Key, newTransAction.NewVal, runtime)
+// 		if err != nil {
+// 			fmt.Println(err)
+// 			fmt.Fprintln(w, err)
+// 			return
+// 		}
+// 		err = sendToOrdering(setvalues, string(theClient.Hash))
+// 		if err != nil {
+// 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
+// 			return
+// 		}
 
-		// No error from sendToOrdering
-		// fmt.Fprintf(w, "ACK")
-	}
-}
+// 		// No error from sendToOrdering
+// 		// fmt.Fprintf(w, "ACK")
+// 	}
+// }
 
-func (runtime *Runtime) Handle_callback(mustSaveState func(*EnvStore) error, endpoint string) error {
-	body := runtimelocalattestation.HttpGet(runtime.TlsConfig, endpoint)
-	callback := &Callback{}
-	err := json.Unmarshal(body, &callback.CallbackList)
+// func (runtime *Runtime) Handle_callback(mustSaveState func(*EnvStore) error, endpoint string) error {
+// 	body := runtimelocalattestation.HttpGet(runtime.TlsConfig, endpoint)
+// 	callback := &Callback{}
+// 	err := json.Unmarshal(body, &callback.CallbackList)
 
-	//err := json.NewDecoder(r.Body).Decode(&callback.CallbackList)
-	if err != nil {
-		return err
-	}
-	// fmt.Fprintf(w, "OK")
+// 	//err := json.NewDecoder(r.Body).Decode(&callback.CallbackList)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	// fmt.Fprintf(w, "OK")
 
-	err = runtime.setTransactionsInEnvironment(mustSaveState, callback)
-	if err != nil {
-		return err
-	}
-	runtime.Handle_callback(mustSaveState, endpoint)
-	return nil
-}
+// 	err = runtime.setTransactionsInEnvironment(mustSaveState, callback)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	runtime.Handle_callback(mustSaveState, endpoint)
+// 	return nil
+// }
 
-func (runtime *Runtime) setTransactionsInEnvironment(mustSaveState func(*EnvStore) error, c *Callback) error {
-	for _, t := range c.CallbackList {
-		(*runtime.Environment).Store[int32(t.Key)] = int32(t.NewVal)
-	}
-	// store all the transactions
-	err := mustSaveState(runtime.Environment)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("%v\n", runtime.Environment.Store)
-	return nil
-}
+// func (runtime *Runtime) setTransactionsInEnvironment(mustSaveState func(*EnvStore) error, c *Callback) error {
+// 	for _, t := range c.CallbackList {
+// 		(*runtime.Environment).Store[int32(t.Key)] = int32(t.NewVal)
+// 	}
+// 	// store all the transactions
+// 	err := mustSaveState(runtime.Environment)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	fmt.Printf("%v\n", runtime.Environment.Store)
+// 	return nil
+// }
 
 func (cl *Client) GetWasmFile(r *http.Request) error {
 	wasmfile := cl.Wasm_file

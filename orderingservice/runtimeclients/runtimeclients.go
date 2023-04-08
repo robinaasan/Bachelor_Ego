@@ -41,7 +41,8 @@ func (cl *Runtimeclient) WritePump() {
 }
 
 // goroutine to handle receiving messages from a single client
-func (cl *Runtimeclient) ReadPump(count int, allTransactions *[]Transaction, createdBlock chan []byte) {
+func (cl *Runtimeclient) ReadPump(allTransactions *[]Transaction, createdBlock chan []byte) {
+	var count int
 	for {
 		_, message, err := cl.Conn.ReadMessage()
 		if err != nil {
@@ -56,12 +57,9 @@ func (cl *Runtimeclient) ReadPump(count int, allTransactions *[]Transaction, cre
 		}
 		//cl.mu.Lock()
 		count++
-		if count < 5 {
-
-			(*allTransactions) = append((*allTransactions), *newTransAction)
-			fmt.Printf("%+v\n", newTransAction)
-			//fmt.Printf("%+v", newTransAction)
-		} else {
+		(*allTransactions) = append((*allTransactions), *newTransAction)
+		fmt.Printf("%+v\n", newTransAction)
+		if count >= 2 {
 			count = 0
 			allTransactionBytes, err := json.Marshal(allTransactions)
 			if err != nil {
@@ -69,9 +67,10 @@ func (cl *Runtimeclient) ReadPump(count int, allTransactions *[]Transaction, cre
 				return
 			}
 			createdBlock <- allTransactionBytes
-
+			(*allTransactions) = []Transaction{}
 			//allTransactions = nil
 		}
+
 		//cl.mu.Unlock()
 		//err = conn.WriteMessage(websocket.TextMessage, []byte("ACK"))
 		cl.Send <- []byte("ACK")
@@ -83,6 +82,7 @@ func BroadcastMessage(message []byte, allruntimeclients []Runtimeclient) {
 	for _, client := range allruntimeclients {
 		select {
 		case client.Send <- message:
+			fmt.Println(string(message))
 		default:
 			// handle error (client disconnected)
 		}

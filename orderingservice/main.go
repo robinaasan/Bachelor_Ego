@@ -37,7 +37,6 @@ type ResponsesRuntime struct {
 type BlockTransactionStore struct {
 	allTransactions      []runtimeclients.Transaction
 	blockchain           *blockchain.BlockChain
-	count                int
 	client               *http.Client
 	runtime_clients      []runtimeclients.Runtimeclient
 	dataToSendInCallback []byte
@@ -61,7 +60,7 @@ func main() {
 	//handleConcurrentRequests.cond = sync.NewCond(&handleConcurrentRequests.mu)
 
 	//create the blocktransactionstore
-	blockTransactionStore := BlockTransactionStore{blockchain: block_chain, count: 0}
+	blockTransactionStore := BlockTransactionStore{blockchain: block_chain}
 	if !fileExist(genBlock) {
 		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
 		if err != nil {
@@ -201,7 +200,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSice int, upgrader *web
 
 		//go newClient.ReadPump(bt.count, mu, &bt.allTransactions, createdBlock)
 
-		go newClient.ReadPump(bt.count, &bt.allTransactions, createdBlock)
+		go newClient.ReadPump(&bt.allTransactions, createdBlock)
 
 		go newClient.WritePump()
 		// block_chain.AddNewblock(transactionData, time.Now().String(), clientName)

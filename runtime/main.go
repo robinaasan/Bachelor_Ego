@@ -25,8 +25,19 @@ import (
 	//"github.com/edgelesssys/ego/enclave"
 )
 
+type Transaction struct {
+	Key        int    `json:"Key"`
+	NewVal     int    `json:"NewVal"`
+	OldVal     int    `json:"OldVal"`
+	ClientName string `json:"ClientName"`
+}
+
+type Callback struct {
+	CallbackList []*Transaction
+}
+
 func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
-	t := handleclient.Transaction{
+	t := Transaction{
 		ClientName: nameClient,
 		Key:        setvalues.Key,
 		NewVal:     setvalues.NewVal,
@@ -48,7 +59,6 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfi
 	// req.URL.RawQuery = q.Encode()
 	// use the established secure channel
 
-	
 	err = conn.WriteMessage(websocket.TextMessage, jsonBody)
 
 	if err != nil {
@@ -56,14 +66,15 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfi
 		return err
 	}
 	// Read message from server
-	_, message, err := conn.ReadMessage()
-	if err != nil {
-		log.Println("Read error:", err)
-		return err
-	}
+	// _, message, err := conn.ReadMessage()
+	// if err != nil {
+	// 	log.Println("Read error:", err)
+	// 	return err
+	// }
 
-	// Print received message
-	fmt.Printf("Received message: %s\n", message)
+	// // Print received message
+	// fmt.Printf("Received message: %s\n", message)
+
 	// resp, err := runtimelocalattestation.HttpPost(tlsConfig, jsonBody, secureURL+"/transaction")
 	// if err != nil {
 	// 	fmt.Printf("Error sending to ordering: %v", err)
@@ -80,6 +91,42 @@ func sendToOrdering(setvalues handleclient.SetValue, nameClient string, tlsConfi
 	// // 	return err
 	// // }
 	// fmt.Println(string(resp))
+	return nil
+}
+
+func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore) {
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			// handle error
+			return
+		}
+		if string(message) == "ACK" {
+			fmt.Printf("%s\n", message)
+			continue
+		}
+		callback := &Callback{}
+		err = json.Unmarshal(message, &callback.CallbackList)
+		if err != nil {
+			panic("Cant read message from orderingservice")
+		}
+		setTransactionsInEnvironment(callback, environment)
+		//if messageType == websocket.TextMessage
+
+	}
+}
+
+func setTransactionsInEnvironment(c *Callback, environment *handleclient.EnvStore) error {
+	for _, t := range c.CallbackList {
+		(*environment).Store[int32(t.Key)] = int32(t.NewVal)
+		fmt.Printf("Received message: %+v\n", t)
+	}
+	// store all the transactions
+	err := mustSaveState(environment)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%v\n", environment.Store)
 	return nil
 }
 
@@ -157,7 +204,7 @@ func main() {
 
 	runtime.SecureRuntimeClient.Transport = tr
 	runtime.SecureRuntimeClient.Timeout = time.Second * 10
-	
+
 	dialer := websocket.DefaultDialer
 	dialer.TLSClientConfig = tlsConfig
 
@@ -175,7 +222,7 @@ func main() {
 	// 	panic(err)
 	// }()
 	//ENDORDERINGSERVER
-	http.HandleFunc("/Init", runtime.InitHandler())
+	http.HandleFunc("/Init", runtime.InitHandler(WaitForOrderingMessages))
 	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 	//http.HandleFunc("/Callback", runtime.Handle_callback(mustSaveState))
