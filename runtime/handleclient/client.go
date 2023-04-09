@@ -1,8 +1,10 @@
 package handleclient
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/benpate/convert"
 )
@@ -44,8 +46,9 @@ type AllClients map[string]*Client
 func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (*SetValue, error) {
 	setvalues := SetValue{0, 0, 0}
 
+	// various commands for the wasm function
 	// fmt.Println(cl.Wasm.Function.Type())
-	//fmt.Println(cl.Wasm.Function.ParameterArity())
+	// fmt.Println(cl.Wasm.Function.ParameterArity())
 	// fmt.Println(cl.Wasm.Function.ResultArity())
 
 	result, err := cl.Wasm.Function.Call(key, value)
@@ -64,7 +67,6 @@ func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (*SetVal
 
 // create the instance for the vendor
 func (cl *Client) CreateInstanceClient(runtime *Runtime) error {
-	// check if the instance already exists
 
 	fmt.Println("Creating Instance...")
 	var err error
@@ -82,4 +84,27 @@ func (cl *Client) CreateInstanceClient(runtime *Runtime) error {
 		return errors.New("error: the function for the client isn't set")
 	}
 	return nil
+}
+
+// set the wasm module for the client
+func (cl *Client) SetWasmFile(r *http.Request) error {
+	wasmfile := cl.Wasm_file
+	err := json.NewDecoder(r.Body).Decode(wasmfile)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Confirm that the client has uploaded a wasm file
+func (cl *Client) WasmFileExist() bool {
+	return len(cl.Wasm_file.File) != 0
+}
+
+func GetClient(hash []byte, allClients AllClients) (*Client, error) {
+	cl, exists := allClients[string(hash)]
+	if exists {
+		return cl, nil
+	}
+	return &Client{}, errors.New("couldnt find any client with that hash.\n")
 }

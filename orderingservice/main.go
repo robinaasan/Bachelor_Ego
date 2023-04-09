@@ -80,11 +80,12 @@ func main() {
 
 	// channel for sending the created blocks to the runtimes, sending to this channel depends on the blockSize constant
 	createdBlock := make(chan []byte)
+	done := make(chan bool)
 	// go routine for waiting for the blocks to be created
-	go blockTransactionStore.waitForBlockFromTransactions(createdBlock)
+	go blockTransactionStore.waitForBlockFromTransactions(createdBlock, done)
 
 	// create the secure server in the orderingservice
-	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, createdBlock)
+	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, createdBlock, done)
 	// run the servers
 	go func() {
 		err := attestServer.ListenAndServe()
@@ -148,9 +149,9 @@ func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
 }
 
 // create the secure server
-func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore, upgrader *websocket.Upgrader, createdBlock chan []byte) *http.Server {
+func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore, upgrader *websocket.Upgrader, createdBlock chan []byte, done chan bool) *http.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize, upgrader, createdBlock))
+	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize, upgrader, createdBlock, done))
 
 	// use server certificate also as client CA
 	parsedCert, _ := x509.ParseCertificate(cert)
@@ -174,23 +175,21 @@ func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactio
 }
 
 // endpoint for handling the transactions from the verified runtimes
-func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *websocket.Upgrader, createdBlock chan []byte) http.HandlerFunc {
+func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *websocket.Upgrader, createdBlock chan []byte, done chan bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			fmt.Println("Error upgrading websocket:", err)
 			panic(err)
 		}
-		//defer conn.Close()
 		// create the connected runtimeccclient
 		newClient := &runtimeclients.Runtimeclient{
 			Conn: conn,
 			Send: make(chan []byte),
 		}
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
-
 		// start a goroutine to handle receiving messages from this client
-		go newClient.ReadPump(blockSize, &bt.allTransactions, createdBlock)
+		go newClient.ReadPump(blockSize, &bt.allTransactions, createdBlock, done)
 
 		// go routine for writing messages to the client
 		go newClient.WritePump()
@@ -198,7 +197,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 	}
 }
 
-func (bt *BlockTransactionStore) waitForBlockFromTransactions(createdBlockbytes chan []byte) {
+func (bt *BlockTransactionStore) waitForBlockFromTransactions(createdBlockbytes chan []byte, done chan bool) {
 	for {
 		select {
 		case c := <-createdBlockbytes:
@@ -213,7 +212,9 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(createdBlockbytes 
 				return
 			}
 			fmt.Println("Should broadcast...")
+			// wait for the prevoius broadcast to finish...
 			runtimeclients.BroadcastMessage(c, bt.runtime_clients)
+			done <- true
 		}
 	}
 }

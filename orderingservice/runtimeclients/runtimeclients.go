@@ -32,14 +32,14 @@ func (rc *Runtimeclient) WritePump() {
 			}
 			err := rc.Conn.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				panic("Couldn't send message on the websocket")
+				fmt.Println(err)
 			}
 		}
 	}
 }
 
 // goroutine to handle receiving messages from a single runtime
-func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]Transaction, createdBlock chan []byte) {
+func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]Transaction, createdBlock chan []byte, done chan bool) {
 	var count int
 	for {
 		_, message, err := rc.Conn.ReadMessage()
@@ -47,14 +47,14 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]Transaction,
 			log.Println(err)
 			break
 		}
-		
+
 		newTransAction := &Transaction{}
 		err = json.Unmarshal(message, newTransAction)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		
+
 		count++
 		(*allTransactions) = append((*allTransactions), *newTransAction)
 		fmt.Printf("%+v\n", newTransAction) //TODO: remove
@@ -66,9 +66,10 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]Transaction,
 				return
 			}
 			createdBlock <- allTransactionBytes
+			// wait for the blocks to be created and broadcasted
+			<-done 
 			(*allTransactions) = []Transaction{}
 		}
-		rc.Send <- []byte("ACK")
 	}
 }
 

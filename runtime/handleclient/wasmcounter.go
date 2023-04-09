@@ -4,7 +4,7 @@ import (
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 )
 
-// struct for holding the wasmer instance and function
+// struct for holding the wasmer instance and function for each client/vendor
 type WasmerGO struct {
 	Instance *wasmer.Instance
 	Function *wasmer.Function
@@ -15,11 +15,10 @@ func NewWasmerGO() *WasmerGO {
 }
 
 // Create a new wasmer instance for a client. 
-//Wasmmodule given as param.
+// Wasmmodule in bytes given as param.
 //Link: https://wasmer.io/posts/wasmer-go-embedding-1.0
 func (runtime *Runtime) GetNewWasmInstace(fileBytes []byte) (*wasmer.Instance, error) {
 	// Create a new module from some WebAssembly in its text representation
-	// (for the sake of simplicity of the example).
 	// Create a store, that holds the engine.
 	module, _ := wasmer.NewModule(
 		runtime.WasmStore,
