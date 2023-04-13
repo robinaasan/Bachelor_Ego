@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/edgelesssys/ego/ecrypto"
@@ -25,36 +26,50 @@ import (
 	//"github.com/edgelesssys/ego/enclave"
 )
 
+type TransactionContent struct {
+	Key        int    `json:"Key"`
+	NewVal     int    `json:"NewVal"`
+	OldVal     int    `json:"OldVal"`
+	ClientName string `json:"ClientName"`
+}
+
 type Transaction struct {
-	Key        int
-	NewVal     int
-	OldVal     int
-	ClientName string
+	TransactionContent `json:"TransactionContent"`
+	TimeStamp          int64 `json:"TimeStamp"`
 }
 
-type Callback struct {
-	CallbackList []*Transaction
+type BlockFromTransactions struct {
+	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
+	TimeStamp               int64                `json:"TimeStamp"`
 }
 
+// type BlockToTime struct {
+// 	CreatedBlock []byte    `json:"CreatedBlock"`
+// 	Timer        time.Time `json:"Timer"`
+// }
 
-
-var timeForResponseSlice []time.Duration
-var timeOnSend time.Time
+//var timeForResponseSlice []string
+//var timeOnSend time.Time
 
 // send the transacions to ordering
-func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
-	timeOnSend = time.Now()
-	t := Transaction{
+func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn, timerNow *int64) error {
+	//timeOnSend = time.Now()
+	tc := TransactionContent{
 		ClientName: nameClient,
 		Key:        setvalues.Key,
 		NewVal:     setvalues.NewVal,
 		OldVal:     setvalues.OldVal,
 	}
+	t := Transaction{
+		TransactionContent: tc,
+		TimeStamp:          *timerNow,
+	}
+	//fmt.Println(t.TimeStamp)
 	jsonBody, err := json.Marshal(t)
 	if err != nil {
 		return err
 	}
-
+	//fmt.Printf("Transaction: %+v\n", t)
 	err = conn.WriteMessage(websocket.TextMessage, jsonBody)
 
 	if err != nil {
@@ -65,7 +80,7 @@ func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConf
 }
 
 // wait for all messages from orderingservice
-func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore) {
+func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore, f *os.File) {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -73,33 +88,41 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 			log.Println("Write error:", err)
 			return
 		}
-		if string(message) == "ACK" {
-			fmt.Printf("%s\n", message)
-			continue
-		}
+		endTime := time.Now()
+		// if string(message) == "ACK" {
+		// 	fmt.Printf("%s\n", message)
+		// 	continue
+		// }
 
-		callback := &Callback{}
-		err = json.Unmarshal(message, &callback.CallbackList)
+		blockFromTransactions := &BlockFromTransactions{}
+		//BlockToTime := &BlockToTime{}
+
+		err = json.Unmarshal(message, blockFromTransactions)
+		//err = json.Unmarshal(message, &BlockToTime)
+		//fmt.Printf("%+v", blockFromTransactions.TransactionContentSlice)
 		if err != nil {
 			panic("Cant read message from orderingservice")
 		}
-		setTransactionsInEnvironment(callback, environment)
-		timeForResponseSlice = append(timeForResponseSlice, time.Duration(time.Since(timeOnSend).Microseconds()))
+		setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
+		timeDiff := endTime.Sub(time.UnixMicro(blockFromTransactions.TimeStamp)).Microseconds()
+		if _, err := f.WriteString(strconv.FormatInt(timeDiff, 10) + ", "); err != nil {
+			panic(err)
+		}
 	}
 }
 
 // set the created blocks in the runtime environment
-func setTransactionsInEnvironment(c *Callback, environment *handleclient.EnvStore) error {
-	for _, t := range c.CallbackList {
+func setTransactionsInEnvironment(transacions []TransactionContent, environment *handleclient.EnvStore) error {
+	for _, t := range transacions {
 		(*environment).Store[int32(t.Key)] = int32(t.NewVal)
-		fmt.Printf("Received message: %+v\n", t)
+		//fmt.Printf("Ready to store: %+v\n", t)
 	}
 	// store all the transactions
 	err := mustSaveState(environment)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%v\n", environment.Store)
+	//fmt.Printf("%v\n", environment.Store)
 	return nil
 }
 
@@ -179,13 +202,22 @@ func main() {
 
 	// set the connection for the runtime
 	runtime.SocketConnectionToOrdering = conn
-	
+
+	f, err := os.OpenFile("./data/storeResponseInFile.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
 	// create a go routine for waiting for messages from the orderingservice
-	go WaitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment)
+	go WaitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment, f)
 
 	http.HandleFunc("/Init", runtime.InitHandler())
 	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
+	// http.HandleFunc("/Stop", func(w http.ResponseWriter, r *http.Request) {
+	// 	fmt.Println(strconv.FormatInt(time.Since(timeOnSend).Microseconds(), 10))
+	// 	fmt.Println("got called")
+	// })
 
 	// The function embeds ego-certificate on its own
 	clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()

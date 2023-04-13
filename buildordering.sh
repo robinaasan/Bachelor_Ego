@@ -1,8 +1,8 @@
 #!/bin/bash
 cd orderingservice
 
-sudo rm blockFiles/*
+sudo rm files/blockFiles/*
 ego-go build
 ego sign orderingservice
-cd ..
+sudo ego run orderingservice
 exec bash

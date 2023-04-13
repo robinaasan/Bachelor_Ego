@@ -8,8 +8,8 @@
     "securityVersion": 3,
     "mounts": [
         {
-            "source": "/home/robin/Bachelor_Ego/orderingservice/blockFiles",
-            "target": "/blockFiles",
+            "source": "/home/robin/Bachelor_Ego/orderingservice/files",
+            "target": "/files",
             "type": "hostfs",
             "readOnly": false
         }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/edgelesssys/ego/enclave"
@@ -22,15 +23,16 @@ import (
 )
 
 const (
-	PATH      = "./blockFiles/"
-	genesis   = "Block1.json"
+	PATH      = "./files/blockFiles/"
+	genesis   = "000Block1.json"
 	blockSize = 5
 )
 
 type BlockTransactionStore struct {
-	allTransactions []runtimeclients.Transaction   //Slice of all transactions to be cerated as a block and sent to all runtimes
-	blockchain      *blockchain.BlockChain         //Blockchain from the blockchain package
-	runtime_clients []runtimeclients.Runtimeclient //Slice of all connected runtimes
+	allTransactions []runtimeclients.TransactionContent //Slice of all transactions to be cerated as a block and sent to all runtimes
+	blockchain      *blockchain.BlockChain              //Blockchain from the blockchain package
+	runtime_clients []runtimeclients.Runtimeclient      //Slice of all connected runtimes
+	mu              sync.Mutex
 }
 
 func main() {
@@ -63,7 +65,6 @@ func main() {
 			return
 		}
 	}
-
 	// create the server certificate and the servers
 	cert, privKey := orderinglocalattestation.CreateServerCertificate()
 	attestServer := newAttestServer(cert, privKey)
@@ -79,13 +80,14 @@ func main() {
 	blockTransactionStore.runtime_clients = []runtimeclients.Runtimeclient{}
 
 	// channel for sending the created blocks to the runtimes, sending to this channel depends on the blockSize constant
-	createdBlock := make(chan []byte)
-	done := make(chan bool)
+	blockFromTransactions := make(chan runtimeclients.BlockFromTransactions)
 	// go routine for waiting for the blocks to be created
-	go blockTransactionStore.waitForBlockFromTransactions(createdBlock, done)
+
+	go blockTransactionStore.waitForBlockFromTransactions(blockFromTransactions)
 
 	// create the secure server in the orderingservice
-	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, createdBlock, done)
+
+	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, blockFromTransactions)
 	// run the servers
 	go func() {
 		err := attestServer.ListenAndServe()
@@ -149,9 +151,9 @@ func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
 }
 
 // create the secure server
-func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore, upgrader *websocket.Upgrader, createdBlock chan []byte, done chan bool) *http.Server {
+func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore, upgrader *websocket.Upgrader, blockFromTransactions chan runtimeclients.BlockFromTransactions) *http.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize, upgrader, createdBlock, done))
+	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize, upgrader, blockFromTransactions))
 
 	// use server certificate also as client CA
 	parsedCert, _ := x509.ParseCertificate(cert)
@@ -175,7 +177,7 @@ func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactio
 }
 
 // endpoint for handling the transactions from the verified runtimes
-func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *websocket.Upgrader, createdBlock chan []byte, done chan bool) http.HandlerFunc {
+func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *websocket.Upgrader, blockFromTransactions chan runtimeclients.BlockFromTransactions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -187,9 +189,11 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 			Conn: conn,
 			Send: make(chan []byte),
 		}
+		//Initialise the timer for evaluation
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
+
 		// start a goroutine to handle receiving messages from this client
-		go newClient.ReadPump(blockSize, &bt.allTransactions, createdBlock, done)
+		go newClient.ReadPump(blockSize, &bt.allTransactions, &bt.mu, blockFromTransactions)
 
 		// go routine for writing messages to the client
 		go newClient.WritePump()
@@ -197,24 +201,44 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 	}
 }
 
-func (bt *BlockTransactionStore) waitForBlockFromTransactions(createdBlockbytes chan []byte, done chan bool) {
+func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransactions chan runtimeclients.BlockFromTransactions) {
 	for {
 		select {
-		case c := <-createdBlockbytes:
+		case c := <-blockFromTransactions:
 			// Add the block from all the transactions (createdBlockbytes)
 			// send them to all the runtimes
-			bt.blockchain.AddNewblock(c, time.Now().String())
-			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
-			newBlockFileName := fmt.Sprintf("%s%s.json", PATH, fmt.Sprintf("Block%v", len(bt.blockchain.Blocks)))
-			err := addBlockFile(newBlockFileName, addedBlock)
+
+			//get the slice with the transactions
+			allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
+
 			if err != nil {
-				//TODO: handle error
-				return
+				panic("Couldnt marshal the transactions")
 			}
-			fmt.Println("Should broadcast...")
+			bt.blockchain.AddNewblock(allTransactionsData, time.Now().String())
+			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+			newBlockFileName := fmt.Sprintf("%s%v.json", PATH, time.Now().UnixNano())
+			err = addBlockFile(newBlockFileName, addedBlock)
+			if err != nil {
+				panic("cant store file(s) in the file system")
+			}
+			// send the created block with the timestamp:
+			blockFromTransactionsbytes, err := json.Marshal(c)
+
+			if err != nil {
+				panic("Couldnt marshal the transactions")
+			}
+			//(*timerSlice) = append((*timerSlice), strconv.FormatInt(time.Since(<-timerChan).Microseconds(), 10))
+
+			// write a new line to the file
+			//time.Sleep(1 * time.Second)
+			//dur := ti.Sub(c.Timer)
+			// timeDiff := time.Since(c.Timer).String()
+			// fmt.Println(timeDiff)
+			// if _, err := f.WriteString(timeDiff + "\n"); err != nil {
+			// 	panic(err)
+			// }
 			// wait for the prevoius broadcast to finish...
-			runtimeclients.BroadcastMessage(c, bt.runtime_clients)
-			done <- true
+			runtimeclients.BroadcastMessage(blockFromTransactionsbytes, bt.runtime_clients, &bt.mu)
 		}
 	}
 }
@@ -263,7 +287,7 @@ func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
 		// TODO: now the genesys block changes gets the the date updated i the blockchain, it is not created a new one
 		// There is probably a better solution than this
 		// if it is the genesis file create that first
-		if fileType[0] == "Block1" {
+		if fileType[0] == "000Block1" {
 			// The genesis block was created in main
 			// Below we use the timestamp and set the same hash as is stored
 			(*block_chain).Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp)
@@ -274,4 +298,18 @@ func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
 
 	}
 	return nil
+}
+
+func storeDataInFile(data *[]string) error {
+	os.Remove("storeResponseInFile.txt")
+	err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Success writing to the file!")
+	return nil
+}
+
+func toString(data *[]string) string {
+	return strings.Join([]string(*data), ",")
 }
