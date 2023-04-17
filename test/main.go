@@ -42,7 +42,7 @@ type ResponsesRuntime struct {
 func main() {
 	// setval := &SetValue{2, 1}
 
-	uniqueID, _ := hex.DecodeString("7901895e949dfee84db7098eb7f57ccbd735427d800b5981f74c58994eb79d29")
+	uniqueID, _ := hex.DecodeString("4fb6dfaa42cb68d4f07e67f59b2eb6ad39c4ed50cf4c7d6ffea0b8075800483a")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -122,11 +122,25 @@ func main() {
 }
 
 func storeDataInFile(data *[]string) error {
-	os.Remove("storeResponseInFile.txt")
-	err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
+	f, err := os.OpenFile("./storeResponseInFile.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o777)
 	if err != nil {
-		return err
+		panic(err)
 	}
+	defer f.Close()
+
+	for _, times := range *data {
+		if _, err := f.WriteString(times + ", "); err != nil {
+			panic(err)
+		}
+	}
+
+	// timeDiff := endTime.Sub(time.UnixMicro(blockFromTransactions.TimeStamp)).Microseconds()
+
+	// os.Remove("storeResponseInFile.txt")
+	// err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
+	// if err != nil {
+	// 	return err
+	// }
 	fmt.Println("Success writing to the file!")
 	return nil
 }

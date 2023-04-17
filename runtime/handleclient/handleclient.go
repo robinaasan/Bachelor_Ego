@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/wasmerio/wasmer-go/wasmer"
@@ -83,7 +82,7 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 	}
 }
 
-func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.Config, string, *websocket.Conn, *int64) error, secureURL string) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		runtime.Lock()
 		defer runtime.Unlock()
@@ -95,12 +94,6 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.C
 			fmt.Fprintf(w, "Error: didn't get any username\n")
 			return
 		}
-		timeNow := time.Now().UnixMicro()
-		// timenow := query.Get("timenow")
-		// if timenow == "" {
-		// 	fmt.Println("Setting timer ...")
-		// 	(*timer) = time.Now()
-		// }
 
 		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
 		if err != nil {
@@ -132,7 +125,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.C
 			fmt.Fprintln(w, err)
 			return
 		}
-		err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering, &timeNow)
+		err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
 		if err != nil {
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 			return

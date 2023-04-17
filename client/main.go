@@ -29,7 +29,7 @@ const (
 
 func main() {
 	fmt.Println(os.Getenv("uniqueid"))
-	uniqueID, _ := hex.DecodeString("6ae31df74b9a9d4ada73f9a15f260a3faf03ad40ae08f43ec5297cd338446c26")
+	uniqueID, _ := hex.DecodeString("4fb6dfaa42cb68d4f07e67f59b2eb6ad39c4ed50cf4c7d6ffea0b8075800483a")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -39,7 +39,7 @@ func main() {
 	}
 	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
 	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	//client := &http.Client{}
+	// client := &http.Client{}
 	err := runTerminalCommands(&client)
 	if err != nil {
 		fmt.Println(err)
