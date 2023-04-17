@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,8 +30,10 @@ type SetValue struct {
 }
 
 type ResponsesRuntime struct {
+	response string
+	endpoint string
 	err      error
-	key      int
+	vals     SetValue
 	duration time.Duration
 }
 
@@ -39,7 +42,7 @@ type ResponsesRuntime struct {
 func main() {
 	// setval := &SetValue{2, 1}
 
-	uniqueID, _ := hex.DecodeString("6ae31df74b9a9d4ada73f9a15f260a3faf03ad40ae08f43ec5297cd338446c26")
+	uniqueID, _ := hex.DecodeString("7901895e949dfee84db7098eb7f57ccbd735427d800b5981f74c58994eb79d29")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -49,30 +52,30 @@ func main() {
 	}
 	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	//client := &http.Client{}
+	// client := &http.Client{}
 
 	wg := &sync.WaitGroup{}
-	//waitResponses := &sync.WaitGroup{}
+	waitResponses := &sync.WaitGroup{}
 	// var mu sync.Mutex
-	//c := make(chan ResponsesRuntime)
+	c := make(chan ResponsesRuntime)
 	wg.Add(1)
 
 	const orderingURL = "https://localhost:8086/Add"
-	//const stopURL = "https://localhost:8086/Stop"
-	//var storeResponse []string
+	var storeResponse []string
 
 	flag.Parse()
 	args := flag.Args()
 	username := args[0]
-	var key, value int
-	key = 0
 
 	go func() {
 		// Create a new ticker that ticks every 1000 milliseconds
-		ticker := time.NewTicker(250 * time.Microsecond)
+		ticker := time.NewTicker(1000 * time.Microsecond)
 
 		// Create a timer that will stop the ticker after 1 second
 		timer := time.NewTimer(1 * time.Second)
+
+		var key, value int
+		key = 1
 
 		for {
 			select {
@@ -85,46 +88,34 @@ func main() {
 
 				return
 			case <-ticker.C:
+				// mu.Lock() // This will make sure no request is sent twice but dont need this for tesing
 				wg.Add(1)
+				waitResponses.Add(1)
 				value += 2
 				key++
-				go sendToRuntime(key, value, orderingURL, wg, client, username)
+				go sendToRuntime(key, value, orderingURL, wg, client, c, time.Now(), username)
 				// fmt.Println(statusUpdate())
 			}
 		}
 	}()
 
-	// go func() {
-	// 	for res := range c {
-	// 		fmt.Printf("%v, duration: %v\n", res.vals, res.duration.Microseconds())
-	// 		storeResponse = append(storeResponse, strconv.FormatInt(res.duration.Microseconds(), 10))
-	// 		waitResponses.Done()
-	// 	}
-	// }()
+	go func() {
+		for res := range c {
+			fmt.Printf("%v, duration: %v\n", res.vals, res.duration.Microseconds())
+			storeResponse = append(storeResponse, strconv.FormatInt(res.duration.Microseconds(), 10))
+			waitResponses.Done()
+		}
+	}()
 	// Wait for all goroutines to finish
 	wg.Wait()
-
 	fmt.Println("finished calling endpoint(s)...")
 
 	// wait for all responses to be added to the list...
-
-	// req, err := http.NewRequest("GET", stopURL, nil)
-
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// _, err = client.Do(req)
-
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
-	// fmt.Println("called to stop...")
-
-	//err := storeDataInFile(&storeResponse)
-	// if err != nil {
-	// 	fmt.Printf("Error: %v\n", err)
-	// }
-
+	waitResponses.Wait()
+	err := storeDataInFile(&storeResponse)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+	}
 	// time.Sleep(1 * time.Second)
 	// ticker.Stop()
 	// done <- true
@@ -148,7 +139,7 @@ func toString(data *[]string) string {
 // 	defer (*wg).Done()
 // }
 
-func sendToRuntime(key int, value int, endpoint string, wg *sync.WaitGroup, runtime *http.Client, username string) {
+func sendToRuntime(key int, value int, endpoint string, wg *sync.WaitGroup, runtime *http.Client, c chan ResponsesRuntime, tm time.Time, username string) {
 	defer wg.Done()
 	// fmt.Println(value)
 
@@ -172,23 +163,23 @@ func sendToRuntime(key int, value int, endpoint string, wg *sync.WaitGroup, runt
 
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
-		//c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
+		c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
 		return
 	}
-	// //req.Header.Add("Content-Type", "application/json")
+	// req.Header.Add("Content-Type", "application/json")
 	req.URL.RawQuery = q.Encode()
-	_, err = runtime.Do(req)
+	res, err := runtime.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
 		return
 	}
-	// defer res.Body.Close()
-	// // responseData, err := io.ReadAll(res.Body)
-	// // if err != nil {
-	// // 	c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
-	// // 	panic("Error posting")
-	// // }
-	// // fmt.Println(string(responseData))
-	// var duration time.Duration = time.Since(tm)
-	// c <- ResponsesRuntime{endpoint, res.Status, nil, SetValue{Key: key, NewVal: value}, duration}
+	defer res.Body.Close()
+	// responseData, err := io.ReadAll(res.Body)
+	// if err != nil {
+	// 	c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
+	// 	panic("Error posting")
+	// }
+	// fmt.Println(string(responseData))
+	var duration time.Duration = time.Since(tm)
+	c <- ResponsesRuntime{endpoint, res.Status, nil, SetValue{Key: key, NewVal: value}, duration}
 }
