@@ -4,18 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 type Runtimeclient struct {
-	Conn  *websocket.Conn       // Websocket connection for each runtime
-	Send  chan []byte           // Message channel for each client
-	Ack   map[int]chan struct{} // Map of messages IDs to acknowledgement channel
-	Queue []Message
+	Conn *websocket.Conn // Websocket connection for each runtime
+	Send chan []byte     // Message channel for each client
 }
 
 type Message struct {
@@ -33,7 +29,6 @@ type TransactionContent struct {
 
 type Transaction struct {
 	TransactionContent `json:"TransactionContent"`
-	ACK                string `json:"ACK"`
 }
 
 type BlockFromTransactions struct {
@@ -45,33 +40,24 @@ func (rc *Runtimeclient) WritePump() {
 	for {
 		select {
 		case message := <-rc.Send:
-			msg := Message{
-				ID:      len(rc.Queue),
-				Payload: message,
-			}
-
-			// Add the message to the queue
-			rc.Queue = append(rc.Queue, msg)
 
 			// Send the message and wait for acknowledgement
-			ackCh := make(chan struct{})
-			rc.Ack[msg.ID] = ackCh
+
 			err := rc.Conn.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
 				fmt.Println("Error writing to runtime", err)
-				delete(rc.Ack, msg.ID)
 				continue
 			}
-			select {
-			case <-ackCh:
-				// Message acknowledged, remove from queue
-				rc.Queue = rc.Queue[1:]
-			case <-time.After(5 * time.Second):
-				// Timeout waiting for acknowledgement, resend message
-				fmt.Println("Timeout waiting for acknowledgement, resending message")
-				delete(rc.Ack, msg.ID)
-				rc.Send <- message
-			}
+			// select {
+			// case <-ackCh:
+			// 	// Message acknowledged, remove from queue
+			// 	rc.Queue = rc.Queue[1:]
+			// case <-time.After(5 * time.Second):
+			// 	// Timeout waiting for acknowledgement, resend message
+			// 	fmt.Println("Timeout waiting for acknowledgement, resending message")
+			// 	delete(rc.Ack, msg.ID)
+			// 	rc.Send <- message
+			// }
 		}
 	}
 }
@@ -93,24 +79,6 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 			log.Println(err)
 			fmt.Println("Error reading from runtime", err)
 			continue
-		}
-
-		// Send acknowledgement for the message
-		id, err := strconv.Atoi(string(newTransAction.ACK))
-		if err != nil {
-			fmt.Println("Invalid message ID", err)
-			continue
-		}
-
-		// sending ack with 0 means that the runtime is simply sending a transaction with no ack for previous message
-		if id != 0 {
-			ackCh, ok := rc.Ack[id]
-			if !ok {
-				fmt.Println("Unknown message ID", id)
-				continue
-			}
-			close(ackCh)
-			delete(rc.Ack, id)
 		}
 
 		// send the transaction

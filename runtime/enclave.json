@@ -8,7 +8,7 @@
     "securityVersion": 3,
     "mounts": [
         {
-            "source": "/home/robin/Bachelor_Ego/runtime",
+            "source": "/home/robina/Bachelor_Ego/runtime",
             "target": "/data",
             "type": "hostfs",
             "readOnly": false
