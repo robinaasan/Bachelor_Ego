@@ -114,7 +114,8 @@ func main() {
 	}
 	err := loadState(runtime.Environment)
 	if err != nil {
-		panic("Error getting the environment")
+		fmt.Println(err)
+		//panic("Error getting the environment")
 	}
 
 	// // TO ORDERINGSERVICE
@@ -211,14 +212,16 @@ func mustSaveState(env *handleclient.EnvStore) error {
 	// Encoding state
 	err := e.Encode(env.Store)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
 	// encrypt the data stored with a key derived from the signer and product id in of the envlave
 	encState, err := ecrypto.SealWithProductKey(b.Bytes(), nil)
 	if err != nil {
+		fmt.Println(err)
 		return err
 	}
-	if err := os.WriteFile("./secret.store", encState, 0o600); err != nil {
+	if err := os.WriteFile("/data/secret.store", encState, 0o600); err != nil {
 		return fmt.Errorf("Error: creating file responded with: %v", err)
 	}
 	return nil
@@ -227,7 +230,7 @@ func mustSaveState(env *handleclient.EnvStore) error {
 // read the file and set map in env from storage
 // If the storage isn't there create one...
 func loadState(env *handleclient.EnvStore) error {
-	file, err := os.ReadFile("./secret.store")
+	file, err := os.ReadFile("/data/secret.store")
 	// if the does not exist...
 	if os.IsNotExist(err) {
 		// TODO:
@@ -235,10 +238,11 @@ func loadState(env *handleclient.EnvStore) error {
 		// must save state stores to the store from env
 		err = mustSaveState(env) // In this context it means to create an empty file since Store is empty
 		if err != nil {
+			fmt.Println("Error here")
 			return err
 		}
 		// It is created with sealing key now so we can read it and unseal it
-		file, err = os.ReadFile("./secret.store")
+		file, err = os.ReadFile("/data/secret.store")
 		if err != nil {
 			return err
 		}
