@@ -15,6 +15,13 @@ type EnvStore struct {
 	Store map[int32]int32
 }
 
+type TransactionContent struct {
+	Key        int    `json:"Key"`
+	NewVal     int    `json:"NewVal"`
+	OldVal     int    `json:"OldVal"`
+	ClientName string `json:"ClientName"`
+}
+
 type Runtime struct {
 	sync.Mutex
 	SecureRuntimeClient        *http.Client
@@ -82,7 +89,7 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 	}
 }
 
-func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(setTransactionsInEnvironment func([]TransactionContent, *EnvStore) error, envstore *EnvStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		runtime.Lock()
 		defer runtime.Unlock()
@@ -125,10 +132,14 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.C
 			fmt.Fprintln(w, err)
 			return
 		}
-		err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
+		err = setTransactionsInEnvironment([]TransactionContent{{setvalues.Key, setvalues.NewVal, setvalues.OldVal, string(theClient.Hash)}}, envstore)
 		if err != nil {
-			fmt.Printf("Error sending to orderingservice: %s", err.Error())
-			return
+			panic("Error getting the key and value from wasmer")
 		}
+		// err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
+		// if err != nil {
+		// 	fmt.Printf("Error sending to orderingservice: %s", err.Error())
+		// 	return
+		// }
 	}
 }
