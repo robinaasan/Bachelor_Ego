@@ -37,14 +37,13 @@ func (rc *Runtimeclient) WritePump() {
 	for {
 		select {
 		case message := <-rc.Send:
-
-			// Send the message and wait for acknowledgement
-			dataToSend, err := json.Marshal(message)
+			
+			dataToSendRuntime, err := json.Marshal(message)
 			if err != nil {
 				panic("Error marshalling data to send to runtime")
 			}
 			
-			err = rc.Conn.WriteMessage(websocket.TextMessage, dataToSend)
+			err = rc.Conn.WriteMessage(websocket.TextMessage, dataToSendRuntime)
 			if err != nil {
 				fmt.Println("Error writing to runtime", err)
 				continue
@@ -77,7 +76,6 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 		(*allTransactions) = append((*allTransactions), *newTransAction)
 		if count >= blockSize {
 			count = 0
-			// allTransactionBytes, err := json.Marshal(allTransactions)
 			if err != nil {
 				log.Println(err)
 				return
@@ -101,8 +99,9 @@ func BroadcastMessage(message *SendBackToRuntime, allruntimeclients []Runtimecli
 		case client.Send <- *message:
 			// fmt.Println("Callback:", string(message))
 		default:
-			// TODO: handle error (runtmime disconnected)
-			log.Println("Check when this runs")
+			// TODO: Error handling
+			log.Println("No message from recieved")
+			return
 		}
 	}
 }

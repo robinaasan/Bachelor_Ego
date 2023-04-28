@@ -29,19 +29,16 @@ const (
 )
 
 type BlockTransactionStore struct {
-	allTransactions []runtimeclients.TransactionContent //Slice of all transactions to be cerated as a block and sent to all runtimes
-	blockchain      *blockchain.BlockChain              //Blockchain from the blockchain package
+	allTransactions []runtimeclients.TransactionContent //Slice of all transactions to be cerated as a block
+	blockchain      *blockchain.BlockChain              //Blockchain from the blockchain module
 	runtime_clients []runtimeclients.Runtimeclient      //Slice of all connected runtimes
 	mu              sync.Mutex
 }
 
 func main() {
-	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis) // path to the genesis block in the filesystem
-
 	// Initialize the blockchain
 	block_chain := blockchain.InitBlockChain(time.Now().String())
-
 	// create the blocktransactionstore with the created blockchain
 	blockTransactionStore := BlockTransactionStore{blockchain: block_chain}
 
@@ -55,15 +52,15 @@ func main() {
 		}
 		// Genesis block exists, load the rest of the blockchain
 	} else {
-		err := ReadAllBlockFiles(blockTransactionStore.blockchain)
+		err := readAllBlockFiles(blockTransactionStore.blockchain)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		if !blockTransactionStore.blockchain.BlockChainisNotCorrupt() {
-			fmt.Println("Blockchain is corrupted")
-			return
-		}
+		// if !blockTransactionStore.blockchain.BlockChainisNotCorrupt() {
+		// 	fmt.Println("Blockchain is corrupted")
+		// 	return
+		// }
 	}
 	// create the server certificate and the servers
 	cert, privKey := orderinglocalattestation.CreateServerCertificate()
@@ -75,7 +72,6 @@ func main() {
 			return true
 		},
 	}
-
 	// initialize the runtimeclients
 	blockTransactionStore.runtime_clients = []runtimeclients.Runtimeclient{}
 
@@ -125,7 +121,6 @@ func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
 		}
 		w.Write(report)
 	})
-
 	// Returns a client certificate for the given pubkey.
 	// The given report ensures that only verified enclaves (runtimes) can get certificates for their pubkeys.
 	mux.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
@@ -208,11 +203,11 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 			// check if the message is to be broadcasted to all runtimes
 			// Add the block from all the transactions (createdBlockbytes)
 			// send them to all the runtimes
-			//get the slice with the transactions
-			//struct to send to runtime(s)
-			
+			// get the slice with the transactions
+			// struct to send to runtime(s)
+
 			sendBackToRuntime := &runtimeclients.SendBackToRuntime{}
-			
+
 			if c.BroadcastToRuntimes {
 				allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
 				if err != nil {
@@ -226,24 +221,11 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 					panic("cant store file(s) in the file system")
 				}
 				sendBackToRuntime.TransactionContentSlice = c.TransactionContentSlice
-				
+
 				runtimeclients.BroadcastMessage(sendBackToRuntime, bt.runtime_clients, &bt.mu)
 			} else { //send only an ack to the runtime
 				runtimeclients.BroadcastMessage(sendBackToRuntime, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)
 			}
-
-			// send the created block with the timestamp:
-			//(*timerSlice) = append((*timerSlice), strconv.FormatInt(time.Since(<-timerChan).Microseconds(), 10))
-
-			// write a new line to the file
-			//time.Sleep(1 * time.Second)
-			//dur := ti.Sub(c.Timer)
-			// timeDiff := time.Since(c.Timer).String()
-			// fmt.Println(timeDiff)
-			// if _, err := f.WriteString(timeDiff + "\n"); err != nil {
-			// 	panic(err)
-			// }
-			// wait for the prevoius broadcast to finish...
 		}
 	}
 }
@@ -269,7 +251,7 @@ func fileExist(filename string) bool {
 	return !info.IsDir()
 }
 
-func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
+func readAllBlockFiles(block_chain *blockchain.BlockChain) error {
 	files, err := os.ReadDir(PATH)
 	if err != nil {
 		return err
@@ -303,18 +285,4 @@ func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
 
 	}
 	return nil
-}
-
-func storeDataInFile(data *[]string) error {
-	os.Remove("storeResponseInFile.txt")
-	err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
-	if err != nil {
-		return err
-	}
-	fmt.Println("Success writing to the file!")
-	return nil
-}
-
-func toString(data *[]string) string {
-	return strings.Join([]string(*data), ",")
 }

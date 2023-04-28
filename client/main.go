@@ -29,7 +29,7 @@ const (
 
 func main() {
 	fmt.Println(os.Getenv("uniqueid"))
-	uniqueID, _ := hex.DecodeString("a5242d3cfd53fc5e9d3cc757aa1d7bd2a467911efce210fac5b24d5e8a0724d1")
+	uniqueID, _ := hex.DecodeString("c8fcf5b3a074b8ad139d2fce500f70e5d478502b75f465811ea0ba6a0564e178")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {

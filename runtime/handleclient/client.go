@@ -24,7 +24,7 @@ type Client struct {
 	Hash      []byte
 	Wasm_file *WasmFile
 	Wasm      *WasmerGO
-	Message chan string
+	Message   chan string
 }
 
 type SetValue struct {
@@ -68,7 +68,6 @@ func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (*SetVal
 
 // create the instance for the vendor
 func (cl *Client) CreateInstanceClient(runtime *Runtime) error {
-
 	fmt.Println("Creating Instance...")
 	var err error
 	cl.Wasm.Instance, err = runtime.GetNewWasmInstace(cl.Wasm_file.File)
