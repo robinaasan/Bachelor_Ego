@@ -32,7 +32,6 @@ type TransactionContent struct {
 	ClientName string `json:"ClientName"`
 }
 
-
 type BlockFromTransactions struct {
 	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
 }
@@ -46,10 +45,10 @@ type BlockFromTransactions struct {
 // var timeOnSend time.Time
 
 // send the transacions to ordering
-func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
+func sendToOrdering(setvalues *handleclient.SetValue, client *handleclient.Client, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
 	// timeOnSend = time.Now()
 	tc := TransactionContent{
-		ClientName: nameClient,
+		ClientName: string(client.Hash),
 		Key:        setvalues.Key,
 		NewVal:     setvalues.NewVal,
 		OldVal:     setvalues.OldVal,
@@ -85,14 +84,20 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 
 		blockFromTransactions := &BlockFromTransactions{}
 		// BlockToTime := &BlockToTime{}
-
 		err = json.Unmarshal(message, blockFromTransactions)
-		// err = json.Unmarshal(message, &BlockToTime)
-		// fmt.Printf("%+v", blockFromTransactions.TransactionContentSlice)
 		if err != nil {
 			panic("Cant read message from orderingservice")
 		}
-		setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
+
+		if len(blockFromTransactions.TransactionContentSlice) == 0 {
+			fmt.Println("Recieved an Ack from ordering")
+		} else {
+			fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
+			setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
+		}
+		// err = json.Unmarshal(message, &BlockToTime)
+		// fmt.Printf("%+v", blockFromTransactions.TransactionContentSlice)
+
 	}
 }
 

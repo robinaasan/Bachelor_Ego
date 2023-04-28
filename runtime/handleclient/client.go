@@ -24,6 +24,7 @@ type Client struct {
 	Hash      []byte
 	Wasm_file *WasmFile
 	Wasm      *WasmerGO
+	Message chan string
 }
 
 type SetValue struct {

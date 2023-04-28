@@ -82,7 +82,7 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 	}
 }
 
-func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, *Client, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		runtime.Lock()
 		defer runtime.Unlock()
@@ -125,7 +125,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, string, *tls.C
 			fmt.Fprintln(w, err)
 			return
 		}
-		err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
+		err = sendToOrdering(setvalues, theClient, runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
 		if err != nil {
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 			return
