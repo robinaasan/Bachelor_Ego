@@ -187,7 +187,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 		// create the connected runtimeccclient
 		newClient := &runtimeclients.Runtimeclient{
 			Conn: conn,
-			Send: make(chan []byte),
+			Send: make(chan runtimeclients.SendBackToRuntime),
 		}
 		//Initialise the timer for evaluation
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
@@ -205,28 +205,34 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 	for {
 		select {
 		case c := <-blockFromTransactions:
+			// check if the message is to be broadcasted to all runtimes
 			// Add the block from all the transactions (createdBlockbytes)
 			// send them to all the runtimes
-
 			//get the slice with the transactions
-			allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
+			//struct to send to runtime(s)
+			
+			sendBackToRuntime := &runtimeclients.SendBackToRuntime{}
+			
+			if c.BroadcastToRuntimes {
+				allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
+				if err != nil {
+					panic("Couldnt marshal the transactions")
+				}
+				bt.blockchain.AddNewblock(allTransactionsData, time.Now().String())
+				addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+				newBlockFileName := fmt.Sprintf("%s%v.json", PATH, time.Now().UnixNano())
+				err = addBlockFile(newBlockFileName, addedBlock)
+				if err != nil {
+					panic("cant store file(s) in the file system")
+				}
+				sendBackToRuntime.TransactionContentSlice = c.TransactionContentSlice
+				
+				runtimeclients.BroadcastMessage(sendBackToRuntime, bt.runtime_clients, &bt.mu)
+			} else { //send only an ack to the runtime
+				runtimeclients.BroadcastMessage(sendBackToRuntime, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)
+			}
 
-			if err != nil {
-				panic("Couldnt marshal the transactions")
-			}
-			bt.blockchain.AddNewblock(allTransactionsData, time.Now().String())
-			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
-			newBlockFileName := fmt.Sprintf("%s%v.json", PATH, time.Now().UnixNano())
-			err = addBlockFile(newBlockFileName, addedBlock)
-			if err != nil {
-				panic("cant store file(s) in the file system")
-			}
 			// send the created block with the timestamp:
-			blockFromTransactionsbytes, err := json.Marshal(c)
-
-			if err != nil {
-				panic("Couldnt marshal the transactions")
-			}
 			//(*timerSlice) = append((*timerSlice), strconv.FormatInt(time.Since(<-timerChan).Microseconds(), 10))
 
 			// write a new line to the file
@@ -238,7 +244,6 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 			// 	panic(err)
 			// }
 			// wait for the prevoius broadcast to finish...
-			runtimeclients.BroadcastMessage(blockFromTransactionsbytes, bt.runtime_clients, &bt.mu)
 		}
 	}
 }

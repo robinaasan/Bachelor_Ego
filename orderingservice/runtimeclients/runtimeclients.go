@@ -10,13 +10,8 @@ import (
 )
 
 type Runtimeclient struct {
-	Conn *websocket.Conn // Websocket connection for each runtime
-	Send chan []byte     // Message channel for each client
-}
-
-type Message struct {
-	ID      int
-	Payload []byte
+	Conn *websocket.Conn        // Websocket connection for each runtime
+	Send chan SendBackToRuntime // Message channel for each client
 }
 
 // Struct for getting the transaction from the runtimes
@@ -27,11 +22,13 @@ type TransactionContent struct {
 	ClientName string `json:"ClientName"`
 }
 
-type Transaction struct {
-	TransactionContent `json:"TransactionContent"`
+type BlockFromTransactions struct {
+	TransactionContentSlice []TransactionContent
+	BroadcastToRuntimes     bool
+	Runtimeclient           *Runtimeclient
 }
 
-type BlockFromTransactions struct {
+type SendBackToRuntime struct {
 	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
 }
 
@@ -42,28 +39,22 @@ func (rc *Runtimeclient) WritePump() {
 		case message := <-rc.Send:
 
 			// Send the message and wait for acknowledgement
-
-			err := rc.Conn.WriteMessage(websocket.TextMessage, message)
+			dataToSend, err := json.Marshal(message)
+			if err != nil {
+				panic("Error marshalling data to send to runtime")
+			}
+			
+			err = rc.Conn.WriteMessage(websocket.TextMessage, dataToSend)
 			if err != nil {
 				fmt.Println("Error writing to runtime", err)
 				continue
 			}
-			// select {
-			// case <-ackCh:
-			// 	// Message acknowledged, remove from queue
-			// 	rc.Queue = rc.Queue[1:]
-			// case <-time.After(5 * time.Second):
-			// 	// Timeout waiting for acknowledgement, resend message
-			// 	fmt.Println("Timeout waiting for acknowledgement, resending message")
-			// 	delete(rc.Ack, msg.ID)
-			// 	rc.Send <- message
-			// }
 		}
 	}
 }
 
 // goroutine to handle receiving messages from a single runtime
-func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionContent, mu *sync.Mutex, blockToTime chan BlockFromTransactions) {
+func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionContent, mu *sync.Mutex, createdblockFromTransactions chan BlockFromTransactions) {
 	var count int
 	for {
 		_, message, err := rc.Conn.ReadMessage()
@@ -73,19 +64,17 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 			return
 		}
 		// the transaction will include some ACK from a message from earlier
-		newTransAction := &Transaction{}
+		newTransAction := &TransactionContent{}
 		err = json.Unmarshal(message, newTransAction)
 		if err != nil {
 			log.Println(err)
 			fmt.Println("Error reading from runtime", err)
 			continue
 		}
-
 		// send the transaction
 		mu.Lock()
 		count++
-		(*allTransactions) = append((*allTransactions), newTransAction.TransactionContent)
-		// fmt.Printf("%+v\n", newTransAction) //TODO: remove
+		(*allTransactions) = append((*allTransactions), *newTransAction)
 		if count >= blockSize {
 			count = 0
 			// allTransactionBytes, err := json.Marshal(allTransactions)
@@ -93,25 +82,23 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 				log.Println(err)
 				return
 			}
-			blockFromTransactions := BlockFromTransactions{TransactionContentSlice: *allTransactions}
-			blockToTime <- blockFromTransactions
-			// timerChan <- timeNow
-			// createdBlock <- allTransactionBytes
 
-			// wait for the blocks to be created and broadcasted
+			createdblockFromTransactions <- BlockFromTransactions{TransactionContentSlice: *allTransactions, BroadcastToRuntimes: true, Runtimeclient: rc}
 			(*allTransactions) = []TransactionContent{}
+		} else {
+			createdblockFromTransactions <- BlockFromTransactions{TransactionContentSlice: []TransactionContent{}, BroadcastToRuntimes: false, Runtimeclient: rc}
 		}
 		mu.Unlock()
 	}
 }
 
 // send a message to all connected runtimez
-func BroadcastMessage(message []byte, allruntimeclients []Runtimeclient, mu *sync.Mutex) {
+func BroadcastMessage(message *SendBackToRuntime, allruntimeclients []Runtimeclient, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 	for _, client := range allruntimeclients {
 		select {
-		case client.Send <- message:
+		case client.Send <- *message:
 			// fmt.Println("Callback:", string(message))
 		default:
 			// TODO: handle error (runtmime disconnected)

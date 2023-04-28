@@ -32,13 +32,9 @@ type TransactionContent struct {
 	ClientName string `json:"ClientName"`
 }
 
-type Transaction struct {
-	TransactionContent `json:"TransactionContent"`
-}
 
 type BlockFromTransactions struct {
 	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
-	ACK                     string               `json:"ACK"`
 }
 
 // type BlockToTime struct {
@@ -58,11 +54,8 @@ func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConf
 		NewVal:     setvalues.NewVal,
 		OldVal:     setvalues.OldVal,
 	}
-	t := Transaction{
-		TransactionContent: tc,
-	}
 	// fmt.Println(t.TimeStamp)
-	jsonBody, err := json.Marshal(t)
+	jsonBody, err := json.Marshal(tc)
 	if err != nil {
 		return err
 	}
