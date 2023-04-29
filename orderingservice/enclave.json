@@ -1,15 +1,15 @@
 {
-    "exe": "main",
-    "key": "private.pem",
+    "exe": "orderingservice",
+    "key": "../private.pem",
     "debug": true,
     "heapSize": 512,
     "executableHeap": true,
-    "productID": 1,
-    "securityVersion": 1,
+    "productID": 2,
+    "securityVersion": 3,
     "mounts": [
         {
-            "source": "/home/azureuser/bachelor_ego/orderingservice/blockFiles",
-            "target": "/blockFiles",
+            "source": "/home/robina/Bachelor_Ego/orderingservice/files",
+            "target": "/files",
             "type": "hostfs",
             "readOnly": false
         }

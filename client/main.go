@@ -27,22 +27,9 @@ const (
 	initEndPoint   = "https://localhost:8086/Init"
 )
 
-// type Client struct {
-// 	c    *http.Client
-// 	name string
-// }
-
-// func NewClient() *Client {
-// 	c := &http.Client{}
-// 	return &Client{
-// 		c:    c,
-// 		name: "Robs",
-// 	}
-// }
-// var userHash []byte
-
 func main() {
-	uniqueID, _ := hex.DecodeString("ae0405fe5267e1e4fdf5075c6b07f60a31dbfe3e0c9121354f2c2aa0d43a6f14")
+	fmt.Println(os.Getenv("uniqueid"))
+	uniqueID, _ := hex.DecodeString("7415a521ebf61e3cf3ff9b0243df5b00a356e0f52a3dc81de8bc11eebc299250")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -52,7 +39,7 @@ func main() {
 	}
 	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
 	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	//client := &http.Client{}
+	// client := &http.Client{}
 	err := runTerminalCommands(&client)
 	if err != nil {
 		fmt.Println(err)
@@ -80,7 +67,7 @@ func runTerminalCommands(client *http.Client) error {
 			return err
 		}
 	case "SET":
-		if len(args) < 4 {
+		if len(args) < 3 {
 			panic(usage_set)
 		}
 		q.Add("cmd", "SET")

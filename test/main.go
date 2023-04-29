@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -43,7 +42,7 @@ type ResponsesRuntime struct {
 func main() {
 	// setval := &SetValue{2, 1}
 
-	uniqueID, _ := hex.DecodeString("6f299bb70a2b81dea359791fc6e8f8723e406919b455b62c73114fc4683b3e11")
+	uniqueID, _ := hex.DecodeString("4fb6dfaa42cb68d4f07e67f59b2eb6ad39c4ed50cf4c7d6ffea0b8075800483a")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
@@ -53,7 +52,7 @@ func main() {
 	}
 	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	//client := &http.Client{}
+	// client := &http.Client{}
 
 	wg := &sync.WaitGroup{}
 	waitResponses := &sync.WaitGroup{}
@@ -67,15 +66,13 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 	username := args[0]
-	q := &url.Values{}
-	q.Add("username", username)
 
 	go func() {
 		// Create a new ticker that ticks every 1000 milliseconds
-		ticker := time.NewTicker(10000 * time.Microsecond)
+		ticker := time.NewTicker(1000 * time.Microsecond)
 
 		// Create a timer that will stop the ticker after 1 second
-		timer := time.NewTimer(10 * time.Second)
+		timer := time.NewTimer(1 * time.Second)
 
 		var key, value int
 		key = 1
@@ -94,8 +91,9 @@ func main() {
 				// mu.Lock() // This will make sure no request is sent twice but dont need this for tesing
 				wg.Add(1)
 				waitResponses.Add(1)
-				value++
-				go sendToRuntime(key, value, orderingURL, wg, client, c, time.Now(), q)
+				value += 2
+				key++
+				go sendToRuntime(key, value, orderingURL, wg, client, c, time.Now(), username)
 				// fmt.Println(statusUpdate())
 			}
 		}
@@ -124,11 +122,25 @@ func main() {
 }
 
 func storeDataInFile(data *[]string) error {
-	os.Remove("storeResponseInFile.txt")
-	err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
+	f, err := os.OpenFile("./storeResponseInFile.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o777)
 	if err != nil {
-		return err
+		panic(err)
 	}
+	defer f.Close()
+
+	for _, times := range *data {
+		if _, err := f.WriteString(times + ", "); err != nil {
+			panic(err)
+		}
+	}
+
+	// timeDiff := endTime.Sub(time.UnixMicro(blockFromTransactions.TimeStamp)).Microseconds()
+
+	// os.Remove("storeResponseInFile.txt")
+	// err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
+	// if err != nil {
+	// 	return err
+	// }
 	fmt.Println("Success writing to the file!")
 	return nil
 }
@@ -141,30 +153,34 @@ func toString(data *[]string) string {
 // 	defer (*wg).Done()
 // }
 
-func sendToRuntime(key int, value int, endpoint string, wg *sync.WaitGroup, runtime *http.Client, c chan ResponsesRuntime, tm time.Time, q *url.Values) {
+func sendToRuntime(key int, value int, endpoint string, wg *sync.WaitGroup, runtime *http.Client, c chan ResponsesRuntime, tm time.Time, username string) {
 	defer wg.Done()
 	// fmt.Println(value)
 
-	t := Transaction{
-		ClientName: "robin",
-		Key:        key,
-		NewVal:     value,
-	}
+	// t := Transaction{
+	// 	ClientName: "robin",
+	// 	Key:        key,
+	// 	NewVal:     value,
+	// }
 	// q := url.Values{}
 	// body := map[string]int{"Key": setvalues.Key, "NewVal": setvalues.NewVal, "OldVal": setvalues.OldVal}
 	// q.Add("client", nameClient)
-	jsonBody, err := json.Marshal(t)
-	if err != nil {
-		c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
-		return
-	}
+	// jsonBody, err := json.Marshal(t)
+	// if err != nil {
+	// 	c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
+	// 	return
+	// }
+	q := &url.Values{}
+	q.Add("username", username)
+	q.Add("key", fmt.Sprint(key))
+	q.Add("value", fmt.Sprint(value))
 
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		c <- ResponsesRuntime{endpoint, "", err, SetValue{}, 0}
 		return
 	}
-	req.Header.Add("Content-Type", "application/json")
+	// req.Header.Add("Content-Type", "application/json")
 	req.URL.RawQuery = q.Encode()
 	res, err := runtime.Do(req)
 	if err != nil {

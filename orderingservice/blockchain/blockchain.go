@@ -23,3 +23,22 @@ func (b *BlockChain) PrintChain() {
 		d.PrintBlock()
 	}
 }
+
+// Code below was a start to confirm the integrity of the blockchain but it is not finished
+
+// func (b *BlockChain) BlockChainisNotCorrupt() bool {
+// 	for i := 1; i < len(b.Blocks); i++ {
+// 		b.Blocks[i].DeriveHash()
+
+// 		// Check that the stored hash in the current block matches the calculated hash
+// 		if !bytes.Equal(b.Blocks[i].Hash, calculateHash(b.Blocks[i])) {
+// 			return false
+// 		}
+
+// 		// Check that the stored hash in the current block matches the hash of the previous block's data
+// 		if !bytes.Equal(b.Blocks[i].PrevHash, b.Blocks[i-1].Hash) {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
