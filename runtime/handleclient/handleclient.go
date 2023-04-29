@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -14,6 +16,8 @@ import (
 type EnvStore struct {
 	Store map[int32]int32
 }
+
+type AllClients map[string]*Client
 
 type Runtime struct {
 	sync.Mutex
@@ -24,6 +28,7 @@ type Runtime struct {
 	AllClients                 AllClients
 	TlsConfig                  *tls.Config
 	SocketConnectionToOrdering *websocket.Conn
+	Timeout                    time.Duration
 }
 
 // Handler for the client/vendor
@@ -31,7 +36,7 @@ func (runtime *Runtime) InitHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		client_name := query.Get("username")
-		_, err := GetClient([]byte(client_name), runtime.AllClients)
+		_, err := GetClient(client_name, runtime.AllClients)
 		if err == nil {
 			fmt.Fprint(w, "This client already exists")
 			return
@@ -39,6 +44,8 @@ func (runtime *Runtime) InitHandler() http.HandlerFunc {
 
 		new_client := NewClient(client_name)
 		runtime.AllClients[string(new_client.Hash)] = new_client
+		new_client.ClientMessages = make(map[string]bool)
+		new_client.WaitForAckFromOrdering = make(chan string)
 
 		fmt.Printf("Createt client with 'hash': %s\n", new_client.Hash)
 		fmt.Fprint(w, "ACK")
@@ -55,7 +62,7 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 			return
 		}
 
-		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
+		theClient, err := GetClient(client_name, runtime.AllClients)
 		if err != nil {
 			fmt.Fprintf(w, "Error: couldn't find the client")
 			return
@@ -82,8 +89,13 @@ func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 	}
 }
 
-func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, *Client, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, *Client, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		timer := time.NewTimer(runtime.Timeout)
+
 		runtime.Lock()
 		defer runtime.Unlock()
 		query := r.URL.Query()
@@ -95,7 +107,7 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, *Client, *tls.
 			return
 		}
 
-		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
+		theClient, err := GetClient(client_name, runtime.AllClients)
 		if err != nil {
 			fmt.Fprintf(w, "Error: getting the client\n")
 			return
@@ -125,10 +137,20 @@ func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, *Client, *tls.
 			fmt.Fprintln(w, err)
 			return
 		}
-		err = sendToOrdering(setvalues, theClient, runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
+		messageId := uuid.New().String()
+		theClient.ClientMessages[messageId] = true
+		//add to client in a chan to indicate that there is a message waiting for ack
+		//runtime.ClientMessageChan <- theClient
+		err = sendToOrdering(setvalues, theClient, messageId, runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
 		if err != nil {
 			fmt.Printf("Error sending to orderingservice: %s", err.Error())
 			return
+		}
+		select {
+		case clientmessage := <-theClient.WaitForAckFromOrdering:
+			fmt.Fprintln(w, clientmessage)
+		case <-timer.C:
+			fmt.Fprintln(w, "")
 		}
 	}
 }

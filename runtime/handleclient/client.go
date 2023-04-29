@@ -21,10 +21,11 @@ func NewWasmFile() *WasmFile {
 
 // structure for each vendor with their respective name (Hasb), uploaded wasmfile and the created wasm instane and wasm function
 type Client struct {
-	Hash      []byte
-	Wasm_file *WasmFile
-	Wasm      *WasmerGO
-	Message   chan string
+	Hash           []byte
+	Wasm_file      *WasmFile
+	Wasm           *WasmerGO
+	ClientMessages map[string]bool
+	WaitForAckFromOrdering chan string
 }
 
 type SetValue struct {
@@ -40,8 +41,6 @@ func NewClient(name string) *Client {
 		Wasm:      NewWasmerGO(), // Wasm contains the wasm function and instace
 	}
 }
-
-type AllClients map[string]*Client
 
 // function for using the wasm function, return the retrieved values
 func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (*SetValue, error) {
@@ -101,8 +100,8 @@ func (cl *Client) WasmFileExist() bool {
 	return len(cl.Wasm_file.File) != 0
 }
 
-func GetClient(hash []byte, allClients AllClients) (*Client, error) {
-	cl, exists := allClients[string(hash)]
+func GetClient(hash string, allClients AllClients) (*Client, error) {
+	cl, exists := allClients[hash]
 	if exists {
 		return cl, nil
 	}

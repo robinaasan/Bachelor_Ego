@@ -32,8 +32,16 @@ type TransactionContent struct {
 	ClientName string `json:"ClientName"`
 }
 
+type MessageToOrdering struct {
+	TransactionContent `json:"TransactionContent"`
+	MessageId          string `json:"MessageId"`
+	ClientHash         string `json:"ClientHash"`
+}
+
 type BlockFromTransactions struct {
 	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
+	MessageId               string               `json:"MessageId"`
+	ClientHash              string               `json:"ClientHash"`
 }
 
 // type BlockToTime struct {
@@ -45,7 +53,7 @@ type BlockFromTransactions struct {
 // var timeOnSend time.Time
 
 // send the transacions to ordering
-func sendToOrdering(setvalues *handleclient.SetValue, client *handleclient.Client, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
+func sendToOrdering(setvalues *handleclient.SetValue, client *handleclient.Client, messageId string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
 	// timeOnSend = time.Now()
 	tc := TransactionContent{
 		ClientName: string(client.Hash),
@@ -53,8 +61,14 @@ func sendToOrdering(setvalues *handleclient.SetValue, client *handleclient.Clien
 		NewVal:     setvalues.NewVal,
 		OldVal:     setvalues.OldVal,
 	}
+
+	m := MessageToOrdering{
+		TransactionContent: tc,
+		MessageId:          messageId,
+		ClientHash:         string(client.Hash),
+	}
 	// fmt.Println(t.TimeStamp)
-	jsonBody, err := json.Marshal(tc)
+	jsonBody, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
@@ -69,7 +83,7 @@ func sendToOrdering(setvalues *handleclient.SetValue, client *handleclient.Clien
 }
 
 // wait for all messages from orderingservice
-func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore) {
+func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore, allclients handleclient.AllClients) {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -77,10 +91,6 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 			log.Println("Write error:", err)
 			return
 		}
-		// if string(message) == "ACK" {
-		// 	fmt.Printf("%s\n", message)
-		// 	continue
-		// }
 
 		blockFromTransactions := &BlockFromTransactions{}
 		// BlockToTime := &BlockToTime{}
@@ -88,13 +98,36 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 		if err != nil {
 			panic("Cant read message from orderingservice")
 		}
+		fmt.Printf("%+v", blockFromTransactions)
 
-		if len(blockFromTransactions.TransactionContentSlice) == 0 {
-			fmt.Println("Recieved an Ack from ordering")
-		} else {
+		if len(blockFromTransactions.TransactionContentSlice) != 0 {
 			fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
 			setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
+
+		} else {
+			fmt.Println("Recieved an Ack from ordering")
 		}
+		//check if the message with the client is registered in this runtime
+		if allclients[blockFromTransactions.ClientHash] != nil {
+			//check if that client has a message with the message id
+			fmt.Println("reached the clcient")
+			client := allclients[blockFromTransactions.ClientHash]
+			if client.ClientMessages[blockFromTransactions.MessageId] {
+				//send ack back to the client
+				fmt.Println("reached the message")
+				client.WaitForAckFromOrdering <- "ACK"
+			}
+		}
+		//for k, v := range
+
+		// for c := range *clientHasMessageChan {
+		// 	//TODO: check if id from ordering matches the one here
+		// 	if c.ClientMessages[blockFromTransactions.MessageId] {
+		// 		//TODO: send message in
+		// 		c.MessageResponse <- "ACK"
+		// 		delete(c.ClientMessages, blockFromTransactions.MessageId)
+		// 	}
+		// }
 		// err = json.Unmarshal(message, &BlockToTime)
 		// fmt.Printf("%+v", blockFromTransactions.TransactionContentSlice)
 
@@ -124,6 +157,7 @@ func main() {
 		WasmStore:           wasmer.NewStore(eng),
 		Environment:         &handleclient.EnvStore{Store: make(map[int32]int32)},
 		AllClients:          make(map[string]*handleclient.Client),
+		Timeout:             time.Second * 5,
 	}
 	err := loadState(runtime.Environment)
 	if err != nil {
@@ -194,7 +228,7 @@ func main() {
 	runtime.SocketConnectionToOrdering = conn
 
 	// create a go routine for waiting for messages from the orderingservice
-	go WaitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment)
+	go WaitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment, runtime.AllClients)
 
 	http.HandleFunc("/Init", runtime.InitHandler())
 	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))

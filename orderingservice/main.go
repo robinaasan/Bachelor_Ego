@@ -206,8 +206,6 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 			// get the slice with the transactions
 			// struct to send to runtime(s)
 
-			sendBackToRuntime := &runtimeclients.SendBackToRuntime{}
-
 			if c.BroadcastToRuntimes {
 				allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
 				if err != nil {
@@ -220,11 +218,13 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 				if err != nil {
 					panic("cant store file(s) in the file system")
 				}
-				sendBackToRuntime.TransactionContentSlice = c.TransactionContentSlice
+				//sendBackToAllRuntime.TransactionContentSlice = c.TransactionContentSlice
 
-				runtimeclients.BroadcastMessage(sendBackToRuntime, bt.runtime_clients, &bt.mu)
+				//send the block back to the last runtime
+				fmt.Println("Client was:", c.MessageId)
+				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: c.TransactionContentSlice, ACK: false, MessageId: c.MessageId, ClientHash: c.ClientHash}, bt.runtime_clients, &bt.mu)
 			} else { //send only an ack to the runtime
-				runtimeclients.BroadcastMessage(sendBackToRuntime, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)
+				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: []runtimeclients.TransactionContent{}, ACK: true, MessageId: c.MessageId, ClientHash: c.ClientHash}, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)
 			}
 		}
 	}
