@@ -57,6 +57,7 @@ func (rc *Runtimeclient) WritePump() {
 			err = rc.Conn.WriteMessage(websocket.TextMessage, dataToSendRuntime)
 			if err != nil {
 				fmt.Println("Error writing to runtime", err)
+				rc.Conn.Close()
 				continue
 			}
 		}
@@ -81,7 +82,6 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 			fmt.Println("Error reading from runtime", err)
 			continue
 		}
-		fmt.Printf("%+v", m)
 		// send the transaction
 		mu.Lock()
 		count++
