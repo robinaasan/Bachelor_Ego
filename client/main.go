@@ -1,3 +1,8 @@
+// This is a script for sending requests to the runtime 
+// First you need to initialise as a client to the runtime: go run main.go INIT <name>
+// Secondly upload the wasm module: go run main.go UPLOAD <name>
+// Finally, you can set a new key-value pair, making the runtime run the module: go run main.go SET <key> <value> <name>
+
 package main
 
 import (
@@ -22,7 +27,7 @@ const (
 )
 
 const (
-	addEndPoint    = "https://localhost:8086/Add"
+	setEndPoint    = "https://localhost:8086/Set"
 	uploadEndPoint = "https://localhost:8086/Upload"
 	initEndPoint   = "https://localhost:8086/Init"
 )
@@ -37,9 +42,8 @@ func main() {
 		}
 		return nil
 	}
-	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport)
+	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport) // create TLS config that verifies report from the runtime
 	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	// client := &http.Client{}
 	err := runTerminalCommands(&client)
 	if err != nil {
 		fmt.Println(err)
@@ -51,14 +55,9 @@ func runTerminalCommands(client *http.Client) error {
 	args := flag.Args()
 	q := url.Values{}
 
-	if len(args) < 1 {
-		panic(usage_set)
-	}
 	switch args[0] {
-
 	case "INIT":
-		// TODO: usage
-		if len(args) < 2 {
+		if len(args) < 2 { //needs "INIT" and "name"
 			panic(usage_set)
 		}
 		q.Add("username", args[1]) // Username of the client
@@ -98,7 +97,7 @@ func runTerminalCommands(client *http.Client) error {
 }
 
 func getAdd(q url.Values, client *http.Client) error {
-	req, err := http.NewRequest("POST", addEndPoint, nil)
+	req, err := http.NewRequest("POST", setEndPoint, nil)
 	if err != nil {
 		return err
 	}
