@@ -13,7 +13,6 @@ type WasmerGO struct {
 func NewWasmerGO() *WasmerGO {
 	return &WasmerGO{}
 }
-
 // Create a new wasmer instance for a client. 
 // Wasmmodule in bytes given as param.
 //Link: https://wasmer.io/posts/wasmer-go-embedding-1.0
@@ -38,10 +37,12 @@ func (runtime *Runtime) GetNewWasmInstace(fileBytes []byte) (*wasmer.Instance, e
 		// The function implementation.
 		func(environment interface{}, args []wasmer.Value) ([]wasmer.Value, error) {
 			// Cast to our environment type
+			// Using the environment shows how wasmer can get access to anything written outside the wasm function
 			env := environment.(*EnvStore)
 			x := args[0].I32() //key
 			y := args[1].I32() + 1//val
 			oldVal, exists := env.Store[x]
+			// can also directly change the environment as shown below
 			// (*env).Store[x] = y
 			if exists {
 				return []wasmer.Value{wasmer.NewI32(x), wasmer.NewI32(y), wasmer.NewI32(oldVal)}, nil

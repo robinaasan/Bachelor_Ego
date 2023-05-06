@@ -40,12 +40,12 @@ func main() {
 	// Initialize the blockchain
 	block_chain := blockchain.InitBlockChain(time.Now().String())
 	// create the blocktransactionstore with the created blockchain
-	blockTransactionStore := BlockTransactionStore{blockchain: block_chain}
+	blockTransactionStore := &BlockTransactionStore{blockchain: block_chain, runtime_clients: []runtimeclients.Runtimeclient{}}
 
 	// check if the genesis block is already created if not create it
-	// Assuming there are not any blocks if the genesis block exists, if that is the case the validation will handle it
+	// Assuming there are not any blocks if the genesis block does not exists
 	if !fileExist(genBlock) {
-		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
+		err := addBlockFile(genBlock, &blockTransactionStore.blockchain.Blocks[0])
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -57,10 +57,6 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		// if !blockTransactionStore.blockchain.BlockChainisNotCorrupt() {
-		// 	fmt.Println("Blockchain is corrupted")
-		// 	return
-		// }
 	}
 	// create the server certificate and the servers
 	cert, privKey := orderinglocalattestation.CreateServerCertificate()
@@ -72,18 +68,14 @@ func main() {
 			return true
 		},
 	}
-	// initialize the runtimeclients
-	blockTransactionStore.runtime_clients = []runtimeclients.Runtimeclient{}
 
 	// channel for sending the created blocks to the runtimes, sending to this channel depends on the blockSize constant
 	blockFromTransactions := make(chan runtimeclients.BlockFromTransactions)
 	// go routine for waiting for the blocks to be created
-
-	go blockTransactionStore.waitForBlockFromTransactions(blockFromTransactions)
+	go blockTransactionStore.waitForBlockFromRuntimeTransactions(blockFromTransactions)
 
 	// create the secure server in the orderingservice
-
-	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, blockFromTransactions)
+	secureServer := newSecureServer(cert, privKey, blockTransactionStore, upgrader, blockFromTransactions)
 	// run the servers
 	go func() {
 		err := attestServer.ListenAndServe()
@@ -184,27 +176,25 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 			Conn: conn,
 			Send: make(chan runtimeclients.SendBackToRuntime),
 		}
-		//Initialise the timer for evaluation
+
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
-
-		// start a goroutine to handle receiving messages from this client
+		// start a goroutine to handle receiving messages from this client(runtime)
 		go newClient.ReadPump(blockSize, &bt.allTransactions, &bt.mu, blockFromTransactions)
-
-		// go routine for writing messages to the client
+		// go routine for writing messages to the client(runtime)
 		go newClient.WritePump()
-		fmt.Println("Ready for callback")
+		fmt.Println("Succesfully connected to new runtime...")
 	}
 }
 
-func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransactions chan runtimeclients.BlockFromTransactions) {
+func (bt *BlockTransactionStore) waitForBlockFromRuntimeTransactions(blockFromTransactions chan runtimeclients.BlockFromTransactions) {
 	for {
 		select {
 		case c := <-blockFromTransactions:
 			// check if the message is to be broadcasted to all runtimes
-			// Add the block from all the transactions (createdBlockbytes)
-			// send them to all the runtimes
-			// get the slice with the transactions
-			// struct to send to runtime(s)
+			// add the block from all the transactions
+			// send block to all the runtimes
+			//else
+			// send ack to runtime (empty blockslice)
 
 			if c.BroadcastToRuntimes {
 				allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
@@ -212,16 +202,16 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 					panic("Couldnt marshal the transactions")
 				}
 				bt.blockchain.AddNewblock(allTransactionsData, time.Now().String())
-				addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+				addedBlock := &bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+				// filename is UnixNano so it gets stored sequentially
 				newBlockFileName := fmt.Sprintf("%s%v.json", PATH, time.Now().UnixNano())
 				err = addBlockFile(newBlockFileName, addedBlock)
 				if err != nil {
 					panic("cant store file(s) in the file system")
 				}
-				//sendBackToAllRuntime.TransactionContentSlice = c.TransactionContentSlice
 
-				//send the block back to the last runtime
-				fmt.Println("Client was:", c.MessageId)
+				//send the block to all connected runtimes
+				//fmt.Println("Client was:", c.ClientHash)
 				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: c.TransactionContentSlice, ACK: false, MessageId: c.MessageId, ClientHash: c.ClientHash}, bt.runtime_clients, &bt.mu)
 			} else { //send only an ack to the runtime
 				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: []runtimeclients.TransactionContent{}, ACK: true, MessageId: c.MessageId, ClientHash: c.ClientHash}, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)
@@ -243,6 +233,7 @@ func addBlockFile(filename string, b *blockchain.Block) error {
 	return nil
 }
 
+// check if a specific file (block) exists in the filesystem
 func fileExist(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -251,6 +242,7 @@ func fileExist(filename string) bool {
 	return !info.IsDir()
 }
 
+// load all blocks from the filesystem
 func readAllBlockFiles(block_chain *blockchain.BlockChain) error {
 	files, err := os.ReadDir(PATH)
 	if err != nil {
@@ -259,7 +251,7 @@ func readAllBlockFiles(block_chain *blockchain.BlockChain) error {
 	for _, file_entry := range files {
 		fileType := strings.Split(file_entry.Name(), ".")
 		if fileType[1] != "json" {
-			return errors.New("rong file type for file")
+			return errors.New("found wrong file type for file")
 		}
 		fmt.Println("Loading file ", file_entry.Name(), "...")
 		newBlock := &blockchain.Block{}
@@ -276,10 +268,10 @@ func readAllBlockFiles(block_chain *blockchain.BlockChain) error {
 		// if it is the genesis file create that first
 		if fileType[0] == "000Block1" {
 			// The genesis block was created in main
-			// Below we use the timestamp and set the same hash as is stored
-			(*block_chain).Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp)
+			// Below we use the timestamp from the newBlock and create a "new" genesisblock which will have the same hash due to Sha256
+			(*block_chain).Blocks[0] = *blockchain.CreateGenesis(newBlock.TimeStamp)
 			(*block_chain).Blocks[0].Data = newBlock.Data
-		} else { // genesis block is already created in the filesystem
+		} else {
 			(*block_chain).AddNewblock(newBlock.Data, newBlock.TimeStamp)
 		}
 

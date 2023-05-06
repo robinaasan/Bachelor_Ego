@@ -11,21 +11,22 @@ import (
 
 type Runtimeclient struct {
 	Conn *websocket.Conn        // Websocket connection for each runtime
-	Send chan SendBackToRuntime // Message channel for each client
+	Send chan SendBackToRuntime // Message channel for each runtime
 }
 
-// Struct for getting the transaction from the runtimes
+// Transaction data from the runtime
 type TransactionContent struct {
 	Key        int    `json:"Key"`
 	NewVal     int    `json:"NewVal"`
 	OldVal     int    `json:"OldVal"`
-	ClientName string `json:"ClientName"`
+	ClientName string `json:"ClientName"` //Name/hash of the vendor
 }
 
-type MessageFromRuntime struct {
+// Content from message from the runtime
+type messageFromRuntime struct {
 	TransactionContent `json:"TransactionContent"`
 	MessageId          string `json:"MessageId"`
-	ClientHash         string `json:"ClientHash"`
+	ClientHash         string `json:"ClientHash"` //Name/hash of the vendor
 }
 
 type BlockFromTransactions struct {
@@ -36,9 +37,10 @@ type BlockFromTransactions struct {
 	ClientHash              string
 }
 
+// struct for sending message back to a runtime
 type SendBackToRuntime struct {
 	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
-	ACK                     bool                 // The runtime who sent the last transaction should recieve a message back inlcuding an ACK
+	ACK                     bool                 `json:"ACK"` // The runtime who sent the last transaction should recieve a message back inlcuding an ACK
 	MessageId               string               `json:"MessageId"`
 	ClientHash              string               `json:"ClientHash"`
 }
@@ -65,7 +67,7 @@ func (rc *Runtimeclient) WritePump() {
 }
 
 // goroutine to handle receiving messages from a single runtime
-func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionContent, mu *sync.Mutex, createdblockFromTransactions chan BlockFromTransactions) {
+func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionContent, mu *sync.Mutex, createdBlockFromTransactions chan BlockFromTransactions) {
 	var count int
 	for {
 		_, message, err := rc.Conn.ReadMessage()
@@ -74,15 +76,15 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 			rc.Conn.Close()
 			return
 		}
-		// the transaction will include some ACK from a message from earlier
-		m := &MessageFromRuntime{}
+
+		m := &messageFromRuntime{}
 		err = json.Unmarshal(message, m)
 		if err != nil {
 			log.Println(err)
 			fmt.Println("Error reading from runtime", err)
 			continue
 		}
-		// send the transaction
+
 		mu.Lock()
 		count++
 		(*allTransactions) = append((*allTransactions), m.TransactionContent)
@@ -93,25 +95,26 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 				return
 			}
 
-			createdblockFromTransactions <- BlockFromTransactions{TransactionContentSlice: *allTransactions, BroadcastToRuntimes: true, Runtimeclient: rc, MessageId: m.MessageId, ClientHash: m.ClientHash}
+			// createdBlockFromTransactions is a channel used in main to wait for created blocks
+			createdBlockFromTransactions <- BlockFromTransactions{TransactionContentSlice: *allTransactions, BroadcastToRuntimes: true, Runtimeclient: rc, MessageId: m.MessageId, ClientHash: m.ClientHash}
 			(*allTransactions) = []TransactionContent{}
 		} else {
-			createdblockFromTransactions <- BlockFromTransactions{TransactionContentSlice: []TransactionContent{}, BroadcastToRuntimes: false, Runtimeclient: rc, MessageId: m.MessageId, ClientHash: m.ClientHash}
+			// send empty slice as acknowledgement to the runtime who send the last message
+			createdBlockFromTransactions <- BlockFromTransactions{TransactionContentSlice: []TransactionContent{}, BroadcastToRuntimes: false, Runtimeclient: rc, MessageId: m.MessageId, ClientHash: m.ClientHash}
 		}
 		mu.Unlock()
 	}
 }
 
-// send a message to all connected runtimez
+// send a message to all connected runtimes
 func BroadcastMessage(message *SendBackToRuntime, allruntimeclients []Runtimeclient, mu *sync.Mutex) {
 	mu.Lock()
 	defer mu.Unlock()
 	for _, client := range allruntimeclients {
 		select {
 		case client.Send <- *message:
-			// fmt.Println("Callback:", string(message))
 		default:
-			// TODO: Error handling
+			// TODO: Error handling not implemented
 			log.Println("No message recieved")
 			return
 		}

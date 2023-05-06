@@ -1,7 +1,9 @@
 package blockchain
 
+// This code is inspired from this github repo:
+// Link: https://github.com/tensor-programming/golang-blockchain
 type BlockChain struct {
-	Blocks []*Block
+	Blocks []Block
 }
 
 func (c *BlockChain) GenesisExists() bool {
@@ -9,13 +11,13 @@ func (c *BlockChain) GenesisExists() bool {
 }
 
 func InitBlockChain(time string) *BlockChain {
-	return &BlockChain{Blocks: []*Block{CreateGenesis(time)}}
+	return &BlockChain{Blocks: []Block{*CreateGenesis(time)}}
 }
 
 func (c *BlockChain) AddNewblock(data []byte, time string) {
 	prevBlock := c.Blocks[len(c.Blocks)-1]
 	n := CreateBlock(data, prevBlock.Hash, time)
-	c.Blocks = append(c.Blocks, n)
+	c.Blocks = append(c.Blocks, *n)
 }
 
 func (b *BlockChain) PrintChain() {
