@@ -174,7 +174,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 		// create the connected runtimeccclient
 		newClient := &runtimeclients.Runtimeclient{
 			Conn: conn,
-			Send: make(chan runtimeclients.SendBackToRuntime),
+			Send: make(chan runtimeclients.SendBackToRuntime, 1),
 		}
 
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
