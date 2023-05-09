@@ -1,5 +1,7 @@
 package orderinglocalattestation
 
+// This code is inspired from a sample created by Edgeless systems regarding local attestation
+// link: https://github.com/edgelesssys/ego/tree/master/samples
 import (
 	"crypto"
 	"crypto/rand"
