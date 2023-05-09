@@ -98,7 +98,6 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 		if err != nil {
 			panic("Cant read message from orderingservice")
 		}
-		fmt.Printf("%+v", blockFromTransactions)
 
 		if len(blockFromTransactions.TransactionContentSlice) != 0 {
 			//fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
@@ -110,27 +109,20 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 		//check if the message with the client is registered in this runtime
 		if allclients[blockFromTransactions.ClientHash] != nil {
 			//check if that client has a message with the message id
+<<<<<<< HEAD
 			//fmt.Println("reached the clcient")
 			client := allclients[blockFromTransactions.ClientHash]
 			if client.ClientMessages[blockFromTransactions.MessageId] {
 				//send ack back to the client
 				//fmt.Println("reached the message")
+=======
+			client := allclients[blockFromTransactions.ClientHash]
+			if client.ClientMessages[blockFromTransactions.MessageId] {
+				//send ack back to the client
+>>>>>>> 45375c6db90504bac947c89c14675fc8dc35546a
 				client.WaitForAckFromOrdering <- "ACK"
 			}
 		}
-		//for k, v := range
-
-		// for c := range *clientHasMessageChan {
-		// 	//TODO: check if id from ordering matches the one here
-		// 	if c.ClientMessages[blockFromTransactions.MessageId] {
-		// 		//TODO: send message in
-		// 		c.MessageResponse <- "ACK"
-		// 		delete(c.ClientMessages, blockFromTransactions.MessageId)
-		// 	}
-		// }
-		// err = json.Unmarshal(message, &BlockToTime)
-		// fmt.Printf("%+v", blockFromTransactions.TransactionContentSlice)
-
 	}
 }
 
