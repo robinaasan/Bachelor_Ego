@@ -2,17 +2,25 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/edgelesssys/ego/ecrypto"
+	"github.com/edgelesssys/ego/enclave"
 	"github.com/gorilla/websocket"
 	"github.com/robinaasan/Bachelor_Ego/runtime/handleclient"
+	"github.com/robinaasan/Bachelor_Ego/runtime/runtimelocalattestation"
+	"github.com/robinaasan/Bachelor_Ego/verifyreport"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 	//"github.com/edgelesssys/ego/enclave"
 )
@@ -106,7 +114,7 @@ func waitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 }
 
 // set the created blocks in the runtime environment
-func setTransactionsInEnvironment(transacions []handleclient.TransactionContent, environment *handleclient.EnvStore) error {
+func setTransactionsInEnvironment(transacions []TransactionContent, environment *handleclient.EnvStore) error {
 	for _, t := range transacions {
 		(*environment).Store[int32(t.Key)] = int32(t.NewVal)
 	}
@@ -201,19 +209,18 @@ func main() {
 	go waitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment, runtime.AllClients)
 
 	http.HandleFunc("/Init", runtime.InitHandler())
-	http.HandleFunc("/Add", runtime.SetHandler(setTransactionsInEnvironment, runtime.Environment))
+	http.HandleFunc("/Add", runtime.SetHandler(sendToOrdering, secureURL))
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 
-	// // The function embeds ego-certificate on its own
-	// clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	// The function embeds ego-certificate on its own
+	clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// create TLS server for the vendors
-	server := http.Server{Addr: ":8086"}
-	// err = server.ListenAndServeTLS("", "")
-	err = server.ListenAndServe()
+	server := http.Server{Addr: ":8086", TLSConfig: clienttlsConfig}
+	err = server.ListenAndServeTLS("", "")
 	fmt.Println("Listening...")
 	if err != nil {
 		fmt.Println("Error here!", err)
@@ -244,7 +251,7 @@ func mustSaveState(env *handleclient.EnvStore) error {
 // read the file and set map in env from storage
 // If the storage isn't there create one...
 func loadState(env *handleclient.EnvStore) error {
-	file, err := os.ReadFile("./secret.store")
+	file, err := os.ReadFile("/data/secret.store")
 	// if the does not exist...
 	if os.IsNotExist(err) {
 		// TODO:
@@ -255,7 +262,7 @@ func loadState(env *handleclient.EnvStore) error {
 			return err
 		}
 		// It is created with sealing key now so we can read it and unseal it
-		file, err = os.ReadFile("./secret.store")
+		file, err = os.ReadFile("/data/secret.store")
 		if err != nil {
 			return err
 		}
