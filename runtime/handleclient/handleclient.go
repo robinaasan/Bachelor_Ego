@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/wasmerio/wasmer-go/wasmer"
 )
@@ -15,12 +17,7 @@ type EnvStore struct {
 	Store map[int32]int32
 }
 
-type TransactionContent struct {
-	Key        int    `json:"Key"`
-	NewVal     int    `json:"NewVal"`
-	OldVal     int    `json:"OldVal"`
-	ClientName string `json:"ClientName"`
-}
+type AllClients map[string]*Client
 
 type Runtime struct {
 	sync.Mutex
@@ -31,23 +28,27 @@ type Runtime struct {
 	AllClients                 AllClients
 	TlsConfig                  *tls.Config
 	SocketConnectionToOrdering *websocket.Conn
+	Timeout                    time.Duration
 }
 
 // Handler for the client/vendor
 func (runtime *Runtime) InitHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
-		client_name := query.Get("username")
-		_, err := GetClient([]byte(client_name), runtime.AllClients)
-		if err == nil {
-			fmt.Fprint(w, "This client already exists")
+		clientName := query.Get("username")
+		cl := GetClient(clientName, runtime.AllClients)
+		if cl.Hash != nil {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, "that client already exists")
 			return
 		}
+		// create the new client
+		newClient := NewClient(clientName)
+		// add the client to the AllClients map
+		runtime.AllClients[string(newClient.Hash)] = newClient
 
-		new_client := NewClient(client_name)
-		runtime.AllClients[string(new_client.Hash)] = new_client
-
-		fmt.Printf("Createt client with 'hash': %s\n", new_client.Hash)
+		fmt.Printf("Createt client with 'hash': %s\n", newClient.Hash)
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ACK")
 
 	}
@@ -55,73 +56,83 @@ func (runtime *Runtime) InitHandler() http.HandlerFunc {
 
 func (runtime *Runtime) UploadHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		clientHasWasmMod := false
 		query := r.URL.Query()
-		client_name := query.Get("username")
-		if client_name == "" {
-			fmt.Fprintf(w, "Error: didn't get any username")
+		clientName := query.Get("username")
+		if clientName == "" {
+			http.Error(w, "didn't get any username", http.StatusForbidden)
 			return
 		}
 
-		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
-		if err != nil {
-			fmt.Fprintf(w, "Error: couldn't find the client")
+		theClient := GetClient(clientName, runtime.AllClients)
+		if theClient.Hash == nil {
+			http.Error(w, "couldn't find the client", http.StatusForbidden)
 			return
 		}
 
 		if theClient.WasmFileExist() {
-			fmt.Fprint(w, "Uploading a new wasm module...")
+			clientHasWasmMod = true
 		}
-
 		// set the wasm module
-		err = theClient.SetWasmFile(r)
+		err := theClient.SetWasmFile(r)
 		if err != nil {
-			fmt.Fprint(w, err.Error())
+			fmt.Println("Error: ", err.Error())
+			http.Error(w, "Server error", http.StatusInternalServerError)
 			return
 		}
-
 		// create the instance for the vendor
 		err = theClient.CreateInstanceClient(runtime)
 		if err != nil {
 			fmt.Fprint(w, err.Error())
 		} else {
-			fmt.Fprint(w, "ACK")
+			w.WriteHeader(http.StatusOK)
+			if clientHasWasmMod {
+				fmt.Fprint(w, "Reuploaded new wasm module")
+			} else {
+				fmt.Fprint(w, "ACK")
+			}
 		}
 	}
 }
 
-func (runtime *Runtime) SetHandler(setTransactionsInEnvironment func([]TransactionContent, *EnvStore) error, envstore *EnvStore) http.HandlerFunc {
+func (runtime *Runtime) SetHandler(sendToOrdering func(*SetValue, *Client, string, *tls.Config, string, *websocket.Conn) error, secureURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		timer := time.NewTimer(runtime.Timeout)
+
 		runtime.Lock()
 		defer runtime.Unlock()
 		query := r.URL.Query()
 
 		// check that the user exists
-		client_name := query.Get("username")
-		if client_name == "" {
-			fmt.Fprintf(w, "Error: didn't get any username\n")
+		clientName := query.Get("username")
+		if clientName == "" {
+			http.Error(w, "Issue with the url values", http.StatusForbidden)
 			return
 		}
 
-		theClient, err := GetClient([]byte(client_name), runtime.AllClients)
-		if err != nil {
-			fmt.Fprintf(w, "Error: getting the client\n")
+		theClient := GetClient(clientName, runtime.AllClients)
+		if theClient.Hash == nil {
+			http.Error(w, "Could not find that client", http.StatusForbidden)
 			return
 		}
 
 		if !theClient.WasmFileExist() {
-			fmt.Fprintf(w, "Error: now wasm module uploaded")
+			http.Error(w, "No Wasm found for that client", http.StatusForbidden)
 			return
 		}
 
 		var key, value int
-		key, err = strconv.Atoi(query.Get("key"))
+		key, err := strconv.Atoi(query.Get("key"))
 		if err != nil {
 			fmt.Fprintf(w, "Error: couldn't get the key\n")
 			return
 		} else {
 			value, err = strconv.Atoi(query.Get("value"))
 			if err != nil {
-				fmt.Fprintf(w, "Error: couldn't get the value\n")
+				http.Error(w, "Server error", http.StatusInternalServerError)
 				return
 			}
 		}
@@ -129,17 +140,26 @@ func (runtime *Runtime) SetHandler(setTransactionsInEnvironment func([]Transacti
 		setvalues, err := theClient.UseWasmFunction(key, value, runtime)
 		if err != nil {
 			fmt.Println(err)
-			fmt.Fprintln(w, err)
+			http.Error(w, "Server error", http.StatusInternalServerError)
 			return
 		}
-		err = setTransactionsInEnvironment([]TransactionContent{{setvalues.Key, setvalues.NewVal, setvalues.OldVal, string(theClient.Hash)}}, envstore)
+		messageId := uuid.New().String()
+		theClient.ClientMessages[messageId] = true
+		//add to client in a chan to indicate that there is a message waiting for ack
+		//runtime.ClientMessageChan <- theClient
+		err = sendToOrdering(setvalues, theClient, messageId, runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
 		if err != nil {
-			panic("Error getting the key and value from wasmer")
+			fmt.Printf("Error sending to orderingservice: %s\n", err.Error())
+			http.Error(w, "Server error", http.StatusInternalServerError)
+			return
 		}
-		// err = sendToOrdering(setvalues, string(theClient.Hash), runtime.TlsConfig, secureURL, runtime.SocketConnectionToOrdering)
-		// if err != nil {
-		// 	fmt.Printf("Error sending to orderingservice: %s", err.Error())
-		// 	return
-		// }
+		// wait for ack from orderingservice, or timout ...
+		select {
+		case clientMessage := <-theClient.WaitForAckFromOrdering:
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, clientMessage)
+		case <-timer.C:
+			http.Error(w, "Request times out", http.StatusRequestTimeout)
+		}
 	}
 }

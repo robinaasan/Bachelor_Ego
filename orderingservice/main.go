@@ -29,39 +29,32 @@ const (
 )
 
 type BlockTransactionStore struct {
-	allTransactions []runtimeclients.TransactionContent //Slice of all transactions to be cerated as a block and sent to all runtimes
-	blockchain      *blockchain.BlockChain              //Blockchain from the blockchain package
+	allTransactions []runtimeclients.TransactionContent //Slice of all transactions to be cerated as a block
+	blockchain      *blockchain.BlockChain              //Blockchain from the blockchain module
 	runtime_clients []runtimeclients.Runtimeclient      //Slice of all connected runtimes
 	mu              sync.Mutex
 }
 
 func main() {
-	// TODO: verify the integrity of the blocks if there is a genesis block
 	genBlock := fmt.Sprintf("%s%s", PATH, genesis) // path to the genesis block in the filesystem
-
 	// Initialize the blockchain
 	block_chain := blockchain.InitBlockChain(time.Now().String())
-
 	// create the blocktransactionstore with the created blockchain
-	blockTransactionStore := BlockTransactionStore{blockchain: block_chain}
+	blockTransactionStore := &BlockTransactionStore{blockchain: block_chain, runtime_clients: []runtimeclients.Runtimeclient{}}
 
 	// check if the genesis block is already created if not create it
-	// Assuming there are not any blocks if the genesis block exists, if that is the case the validation will handle it
+	// Assuming there are not any blocks if the genesis block does not exists
 	if !fileExist(genBlock) {
-		err := addBlockFile(genBlock, blockTransactionStore.blockchain.Blocks[0])
+		err := addBlockFile(genBlock, &blockTransactionStore.blockchain.Blocks[0])
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		// Genesis block exists, load the rest of the blockchain
 	} else {
-		err := ReadAllBlockFiles(blockTransactionStore.blockchain)
+		err := readAllBlockFiles(blockTransactionStore.blockchain)
 		if err != nil {
 			fmt.Println(err)
-			return
-		}
-		if !blockTransactionStore.blockchain.BlockChainisNotCorrupt() {
-			fmt.Println("Blockchain is corrupted")
 			return
 		}
 	}
@@ -76,18 +69,13 @@ func main() {
 		},
 	}
 
-	// initialize the runtimeclients
-	blockTransactionStore.runtime_clients = []runtimeclients.Runtimeclient{}
-
 	// channel for sending the created blocks to the runtimes, sending to this channel depends on the blockSize constant
 	blockFromTransactions := make(chan runtimeclients.BlockFromTransactions)
 	// go routine for waiting for the blocks to be created
-
-	go blockTransactionStore.waitForBlockFromTransactions(blockFromTransactions)
+	go blockTransactionStore.waitForBlockFromRuntimeTransactions(blockFromTransactions)
 
 	// create the secure server in the orderingservice
-
-	secureServer := newSecureServer(cert, privKey, &blockTransactionStore, upgrader, blockFromTransactions)
+	secureServer := newSecureServer(cert, privKey, blockTransactionStore, upgrader, blockFromTransactions)
 	// run the servers
 	go func() {
 		err := attestServer.ListenAndServe()
@@ -125,7 +113,6 @@ func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
 		}
 		w.Write(report)
 	})
-
 	// Returns a client certificate for the given pubkey.
 	// The given report ensures that only verified enclaves (runtimes) can get certificates for their pubkeys.
 	mux.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
@@ -187,58 +174,48 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 		// create the connected runtimeccclient
 		newClient := &runtimeclients.Runtimeclient{
 			Conn: conn,
-			Send: make(chan []byte),
+			Send: make(chan runtimeclients.SendBackToRuntime, 1),
 		}
-		//Initialise the timer for evaluation
+
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
-
-		// start a goroutine to handle receiving messages from this client
+		// start a goroutine to handle receiving messages from this client(runtime)
 		go newClient.ReadPump(blockSize, &bt.allTransactions, &bt.mu, blockFromTransactions)
-
-		// go routine for writing messages to the client
+		// go routine for writing messages to the client(runtime)
 		go newClient.WritePump()
-		fmt.Println("Ready for callback")
+		fmt.Println("Succesfully connected to new runtime...")
 	}
 }
 
-func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransactions chan runtimeclients.BlockFromTransactions) {
+func (bt *BlockTransactionStore) waitForBlockFromRuntimeTransactions(blockFromTransactions chan runtimeclients.BlockFromTransactions) {
 	for {
 		select {
 		case c := <-blockFromTransactions:
-			// Add the block from all the transactions (createdBlockbytes)
-			// send them to all the runtimes
+			// check if the message is to be broadcasted to all runtimes
+			// add the block from all the transactions
+			// send block to all the runtimes
+			//else
+			// send ack to runtime (empty blockslice)
 
-			//get the slice with the transactions
-			allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
+			if c.BroadcastToRuntimes {
+				allTransactionsData, err := json.Marshal(c.TransactionContentSlice)
+				if err != nil {
+					panic("Couldnt marshal the transactions")
+				}
+				bt.blockchain.AddNewblock(allTransactionsData, time.Now().String())
+				addedBlock := &bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
+				// filename is UnixNano so it gets stored sequentially
+				newBlockFileName := fmt.Sprintf("%s%v.json", PATH, time.Now().UnixNano())
+				err = addBlockFile(newBlockFileName, addedBlock)
+				if err != nil {
+					panic("cant store file(s) in the file system")
+				}
 
-			if err != nil {
-				panic("Couldnt marshal the transactions")
+				//send the block to all connected runtimes
+				//fmt.Println("Client was:", c.ClientHash)
+				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: c.TransactionContentSlice, ACK: false, MessageId: c.MessageId, ClientHash: c.ClientHash}, bt.runtime_clients)
+			} else { //send only an ack to the runtime
+				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: []runtimeclients.TransactionContent{}, ACK: true, MessageId: c.MessageId, ClientHash: c.ClientHash}, []runtimeclients.Runtimeclient{*c.Runtimeclient})
 			}
-			bt.blockchain.AddNewblock(allTransactionsData, time.Now().String())
-			addedBlock := bt.blockchain.Blocks[len(bt.blockchain.Blocks)-1]
-			newBlockFileName := fmt.Sprintf("%s%v.json", PATH, time.Now().UnixNano())
-			err = addBlockFile(newBlockFileName, addedBlock)
-			if err != nil {
-				panic("cant store file(s) in the file system")
-			}
-			// send the created block with the timestamp:
-			blockFromTransactionsbytes, err := json.Marshal(c)
-
-			if err != nil {
-				panic("Couldnt marshal the transactions")
-			}
-			//(*timerSlice) = append((*timerSlice), strconv.FormatInt(time.Since(<-timerChan).Microseconds(), 10))
-
-			// write a new line to the file
-			//time.Sleep(1 * time.Second)
-			//dur := ti.Sub(c.Timer)
-			// timeDiff := time.Since(c.Timer).String()
-			// fmt.Println(timeDiff)
-			// if _, err := f.WriteString(timeDiff + "\n"); err != nil {
-			// 	panic(err)
-			// }
-			// wait for the prevoius broadcast to finish...
-			runtimeclients.BroadcastMessage(blockFromTransactionsbytes, bt.runtime_clients, &bt.mu)
 		}
 	}
 }
@@ -256,6 +233,7 @@ func addBlockFile(filename string, b *blockchain.Block) error {
 	return nil
 }
 
+// check if a specific file (block) exists in the filesystem
 func fileExist(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -264,7 +242,8 @@ func fileExist(filename string) bool {
 	return !info.IsDir()
 }
 
-func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
+// load all blocks from the filesystem
+func readAllBlockFiles(block_chain *blockchain.BlockChain) error {
 	files, err := os.ReadDir(PATH)
 	if err != nil {
 		return err
@@ -272,7 +251,7 @@ func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
 	for _, file_entry := range files {
 		fileType := strings.Split(file_entry.Name(), ".")
 		if fileType[1] != "json" {
-			return errors.New("rong file type for file")
+			return errors.New("found wrong file type for file")
 		}
 		fmt.Println("Loading file ", file_entry.Name(), "...")
 		newBlock := &blockchain.Block{}
@@ -289,27 +268,13 @@ func ReadAllBlockFiles(block_chain *blockchain.BlockChain) error {
 		// if it is the genesis file create that first
 		if fileType[0] == "000Block1" {
 			// The genesis block was created in main
-			// Below we use the timestamp and set the same hash as is stored
-			(*block_chain).Blocks[0] = blockchain.CreateGenesis(newBlock.TimeStamp)
+			// Below we use the timestamp from the newBlock and create a "new" genesisblock which will have the same hash due to Sha256
+			(*block_chain).Blocks[0] = *blockchain.CreateGenesis(newBlock.TimeStamp)
 			(*block_chain).Blocks[0].Data = newBlock.Data
-		} else { // genesis block is already created in the filesystem
+		} else {
 			(*block_chain).AddNewblock(newBlock.Data, newBlock.TimeStamp)
 		}
 
 	}
 	return nil
-}
-
-func storeDataInFile(data *[]string) error {
-	os.Remove("storeResponseInFile.txt")
-	err := os.WriteFile("storeResponseInFile.txt", []byte(toString(data)), 0o777)
-	if err != nil {
-		return err
-	}
-	fmt.Println("Success writing to the file!")
-	return nil
-}
-
-func toString(data *[]string) string {
-	return strings.Join([]string(*data), ",")
 }

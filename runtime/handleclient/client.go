@@ -19,11 +19,14 @@ func NewWasmFile() *WasmFile {
 	}
 }
 
-// structure for each vendor with their respective name (Hasb), uploaded wasmfile and the created wasm instane and wasm function
+// structure for each vendor with their respective name (Hash), 
+// uploaded wasm file and the created wasm instance and wasm function
 type Client struct {
-	Hash      []byte
-	Wasm_file *WasmFile
-	Wasm      *WasmerGO
+	Hash           []byte
+	Wasm_file      *WasmFile
+	Wasm           *WasmerGO
+	ClientMessages map[string]bool // map for a unique message Id (string) set to true if the client (vendor) sent a message 
+	WaitForAckFromOrdering chan string // channel for waiting for ack after client sending the message (transaction) to ordering
 }
 
 type SetValue struct {
@@ -37,10 +40,10 @@ func NewClient(name string) *Client {
 		Hash:      []byte(name),  // name of the client
 		Wasm_file: NewWasmFile(), // Wasm_file is the file in bytes
 		Wasm:      NewWasmerGO(), // Wasm contains the wasm function and instace
+		ClientMessages: make(map[string]bool),
+		WaitForAckFromOrdering: make(chan string),
 	}
 }
-
-type AllClients map[string]*Client
 
 // function for using the wasm function, return the retrieved values
 func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (*SetValue, error) {
@@ -67,7 +70,6 @@ func (cl *Client) UseWasmFunction(key int, value int, runtime *Runtime) (*SetVal
 
 // create the instance for the vendor
 func (cl *Client) CreateInstanceClient(runtime *Runtime) error {
-
 	fmt.Println("Creating Instance...")
 	var err error
 	cl.Wasm.Instance, err = runtime.GetNewWasmInstace(cl.Wasm_file.File)
@@ -101,10 +103,10 @@ func (cl *Client) WasmFileExist() bool {
 	return len(cl.Wasm_file.File) != 0
 }
 
-func GetClient(hash []byte, allClients AllClients) (*Client, error) {
-	cl, exists := allClients[string(hash)]
+func GetClient(hash string, allClients AllClients) (*Client) {
+	cl, exists := allClients[hash]
 	if exists {
-		return cl, nil
+		return cl
 	}
-	return &Client{}, errors.New("couldnt find any client with that hash.\n")
+	return &Client{}
 }

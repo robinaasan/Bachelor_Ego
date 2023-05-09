@@ -1,3 +1,8 @@
+// This is a script for sending requests to the runtime
+// First you need to initialise as a client to the runtime: go run main.go INIT <name>
+// Secondly upload the wasm module: go run main.go UPLOAD <name>
+// Finally, you can set a new key-value pair, making the runtime run the module: go run main.go SET <key> <value> <name>
+
 package main
 
 import (
@@ -12,20 +17,36 @@ import (
 )
 
 const (
-	usage_set    string = "Usage: client <cmd> <key> <value>"
-	usage_upload string = "Usage: client <UPLOAD> <USERNAME>"
+	usage_default string = "Usage: <cmd> <values> <clientname>"
+	usage_init    string = "Usage: <clientname>"
+	usage_upload  string = "Usage: <pathtofile> <clientname>"
+	usage_set     string = "Usage: <key> <value> <clientname>"
 )
 
 const (
+	setEndPoint    = "https://localhost:8086/Add"
+	uploadEndPoint = "https://localhost:8086/Upload"
+	initEndPoint   = "https://localhost:8086/Init"
 	addEndPoint    = "http://localhost:8086/Add"
 	uploadEndPoint = "http://localhost:8086/Upload"
 	initEndPoint   = "http://localhost:8086/Init"
 )
 
 func main() {
+	fmt.Println(os.Getenv("uniqueid"))
+	uniqueID, _ := hex.DecodeString("d82cd4fce92b92a9b702b71d061898ba77dc9e506d6a61ea9d9705e892ee2f80")
 	// fmt.Println(os.Getenv("uniqueid"))
 	// uniqueID, _ := hex.DecodeString("4fb6dfaa42cb68d4f07e67f59b2eb6ad39c4ed50cf4c7d6ffea0b8075800483a")
 
+	verifyReport := func(report attestation.Report) error {
+		if !bytes.Equal(report.UniqueID, uniqueID) {
+			return errors.New("invalid UniqueID")
+		}
+		return nil
+	}
+	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport) // create TLS config that verifies report from the runtime
+	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	err := runTerminalCommands(&client)
 	// verifyReport := func(report attestation.Report) error {
 	// 	if !bytes.Equal(report.UniqueID, uniqueID) {
 	// 		return errors.New("invalid UniqueID")
@@ -45,27 +66,33 @@ func runTerminalCommands(client *http.Client) error {
 	flag.Parse()
 	args := flag.Args()
 	q := url.Values{}
-
 	if len(args) < 1 {
-		panic(usage_set)
+		panic(usage_default)
 	}
 	switch args[0] {
-
 	case "INIT":
-		// TODO: usage
-		if len(args) < 2 {
-			panic(usage_set)
+		if len(args) < 2 { //needs "INIT" and "name"
+			panic(usage_init)
 		}
 		q.Add("username", args[1]) // Username of the client
-		err := getAndStoreHash(q, client)
+		err := getInitForClient(q, client)
+		if err != nil {
+			return err
+		}
+	case "UPLOAD":
+		if len(args) < 3 {
+			panic(usage_upload)
+		}
+		q.Add("username", args[2]) // name of the user
+		wasmmodule := args[1]
+		err := postUploadFileForClient(q, client, wasmmodule)
 		if err != nil {
 			return err
 		}
 	case "SET":
-		if len(args) < 3 {
+		if len(args) < 4 { //needs "SET", "key", "value", name
 			panic(usage_set)
 		}
-		q.Add("cmd", "SET")
 		q.Add("key", args[1])
 		q.Add("value", args[2])
 		q.Add("username", args[3])
@@ -73,59 +100,37 @@ func runTerminalCommands(client *http.Client) error {
 		if err != nil {
 			return err
 		}
-		// run function that calls one endpoint
-
-	case "UPLOAD":
-		if len(args) < 2 {
-			panic(usage_upload)
-		}
-		q.Add("cmd", "UPLOAD")
-		q.Add("username", args[1]) // name of the user
-		err := postUploadFile(q, client, args[1])
-		if err != nil {
-			return err
-		}
-		// run function that calls the other one
 	default: // optimalt panic(usage)
-		panic(usage_set)
+		panic(usage_default)
 	}
 	return nil
 }
 
 func getAdd(q url.Values, client *http.Client) error {
-	req, err := http.NewRequest("POST", addEndPoint, nil)
+	req, err := http.NewRequest("POST", setEndPoint, nil)
 	if err != nil {
 		return err
 	}
 	req.URL.RawQuery = q.Encode() // Encode and assign back to the original query.
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
-	// response from server:
-	// bs := make([]byte, 1024)
-	// resp.Body.Read(bs)
-	// fmt.Printf("%v\n", string(bs))
 	defer resp.Body.Close()
-
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Printf("Res: %v\n", string(resBody))
-
 	return nil
 }
 
-func getAndStoreHash(q url.Values, client *http.Client) error {
-	// b := []byte{}
+func getInitForClient(q url.Values, client *http.Client) error {
 	req, err := http.NewRequest("GET", initEndPoint, nil)
 	if err != nil {
 		return err
 	}
 	req.URL.RawQuery = q.Encode()
-	//(*client).Timeout = 5 * time.Second
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -139,7 +144,7 @@ func getAndStoreHash(q url.Values, client *http.Client) error {
 	return nil
 }
 
-func postUploadFile(q url.Values, client *http.Client, name string) error {
+func postUploadFileForClient(q url.Values, client *http.Client, wasmfilepath string) error {
 	// https://webassembly.github.io/wabt/demo/wat2wasm/
 	// 	wasmBytes := []byte(`
 	//  (module
@@ -150,7 +155,7 @@ func postUploadFile(q url.Values, client *http.Client, name string) error {
 	// 				(local.get $x)
 	// 				(local.get $y))))
 	// `)
-	wasmBytes, err := os.ReadFile("./newwasm.wasm")
+	wasmBytes, err := os.ReadFile(wasmfilepath)
 	if err != nil {
 		return err
 	}
@@ -171,7 +176,6 @@ func postUploadFile(q url.Values, client *http.Client, name string) error {
 		return err
 	}
 	// response from server:
-
 	defer resp.Body.Close()
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {

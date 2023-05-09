@@ -10,55 +10,7 @@ import (
 	"os"
 	"strings"
 )
-
-// func main() {
-// 	const attestURL = "http://localhost:8087"
-// 	const secureURL = "https://localhost:8088"
-
-// 	// create client keys
-// 	privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-// 	pubKey := x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
-
-// 	// get server certificate over insecure channel
-// 	serverCert := httpGet(nil, attestURL+"/cert")
-
-// 	// get the server's report targeted at this client
-// 	clientInfoReport, err := enclave.GetLocalReport(nil, nil)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	serverReport := httpGet(nil, attestURL+"/report", makeArg("target", clientInfoReport))
-
-// 	// verify server certificate using the server's report
-// 	if err := verifyreport.VerifyReport(serverReport, serverCert); err != nil {
-// 		panic(err)
-// 	}
-
-// 	// request a client certificate from the server
-// 	pubKeyHash := sha256.Sum256(pubKey)
-// 	clientReport, err := enclave.GetLocalReport(pubKeyHash[:], serverReport)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	clientCert := httpGet(nil, attestURL+"/client", makeArg("pubkey", pubKey), makeArg("report", clientReport))
-
-// 	// create mutual TLS config
-// 	tlsConfig := &tls.Config{
-// 		Certificates: []tls.Certificate{
-// 			{
-// 				Certificate: [][]byte{clientCert},
-// 				PrivateKey:  privKey,
-// 			},
-// 		},
-// 		RootCAs: x509.NewCertPool(),
-// 	}
-// 	parsedServerCert, _ := x509.ParseCertificate(serverCert)
-// 	tlsConfig.RootCAs.AddCert(parsedServerCert)
-
-// 	// use the established secure channel
-// 	resp := httpGet(tlsConfig, secureURL+"/ping")
-// 	fmt.Printf("server responded: %s\n", resp)
-// }
+//code inspired from edgeless systems github report: https://github.com/edgelesssys/ego/tree/master/samples/local_attestation
 
 func HttpGet(tlsConfig *tls.Config, url string, args ...string) []byte {
 	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}

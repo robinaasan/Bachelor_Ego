@@ -1,4 +1,6 @@
 package blockchain
+// This code is inspired from this github repo:
+// Link: https://github.com/tensor-programming/golang-blockchain
 
 import (
 	"bytes"

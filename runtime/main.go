@@ -17,43 +17,50 @@ import (
 	//"github.com/edgelesssys/ego/enclave"
 )
 
-type Transaction struct {
-	handleclient.TransactionContent `json:"TransactionContent"`
+// struct for created transaction (created by wasm)
+type TransactionContent struct {
+	Key        int    `json:"Key"`
+	NewVal     int    `json:"NewVal"`
+	OldVal     int    `json:"OldVal"`
+	ClientName string `json:"ClientName"`
 }
 
+// Message struct sent to orderingservice
+type MessageToOrdering struct {
+	TransactionContent `json:"TransactionContent"`
+	MessageId          string `json:"MessageId"`
+	ClientHash         string `json:"ClientHash"`
+}
+
+// message recieved from orderingservice
+// the TransactionContentSlice is empty if it is an acknowledgement
 type BlockFromTransactions struct {
-	TransactionContentSlice []handleclient.TransactionContent `json:"TransactionContentSlice"`
-	ACK                     string                            `json:"ACK"`
+	TransactionContentSlice []TransactionContent `json:"TransactionContentSlice"`
+	ACK                     bool                 `json:"ACK"` // This is true if it is an ack to the runtime who sent the transaction
+	MessageId               string               `json:"MessageId"`
+	ClientHash              string               `json:"ClientHash"`
 }
-
-// type BlockToTime struct {
-// 	CreatedBlock []byte    `json:"CreatedBlock"`
-// 	Timer        time.Time `json:"Timer"`
-// }
-
-// var timeForResponseSlice []string
-// var timeOnSend time.Time
 
 // send the transacions to ordering
-func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
-	// timeOnSend = time.Now()
-	tc := handleclient.TransactionContent{
-		ClientName: nameClient,
+func sendToOrdering(setvalues *handleclient.SetValue, client *handleclient.Client, messageId string, tlsConfig *tls.Config, secureURL string, conn *websocket.Conn) error {
+	tc := TransactionContent{
+		ClientName: string(client.Hash),
 		Key:        setvalues.Key,
 		NewVal:     setvalues.NewVal,
 		OldVal:     setvalues.OldVal,
 	}
-	t := Transaction{
+
+	m := MessageToOrdering{
 		TransactionContent: tc,
+		MessageId:          messageId,
+		ClientHash:         string(client.Hash),
 	}
-	// fmt.Println(t.TimeStamp)
-	jsonBody, err := json.Marshal(t)
+	jsonBody, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
-	// fmt.Printf("Transaction: %+v\n", t)
-	err = conn.WriteMessage(websocket.TextMessage, jsonBody)
 
+	err = conn.WriteMessage(websocket.TextMessage, jsonBody)
 	if err != nil {
 		log.Println("Write error:", err)
 		return err
@@ -62,7 +69,7 @@ func sendToOrdering(setvalues *handleclient.SetValue, nameClient string, tlsConf
 }
 
 // wait for all messages from orderingservice
-func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore) {
+func waitForOrderingMessages(conn *websocket.Conn, environment *handleclient.EnvStore, allclients handleclient.AllClients) {
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -70,21 +77,31 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 			log.Println("Write error:", err)
 			return
 		}
-		// if string(message) == "ACK" {
-		// 	fmt.Printf("%s\n", message)
-		// 	continue
-		// }
 
 		blockFromTransactions := &BlockFromTransactions{}
 		// BlockToTime := &BlockToTime{}
-
 		err = json.Unmarshal(message, blockFromTransactions)
-		// err = json.Unmarshal(message, &BlockToTime)
-		// fmt.Printf("%+v", blockFromTransactions.TransactionContentSlice)
 		if err != nil {
 			panic("Cant read message from orderingservice")
 		}
-		setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
+
+		if len(blockFromTransactions.TransactionContentSlice) != 0 && !blockFromTransactions.ACK {
+			//fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
+			setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
+		} else {
+			fmt.Println("Recieved an Ack from ordering")
+		}
+		//check if the message with the client is registered in this runtime
+		if allclients[blockFromTransactions.ClientHash] != nil {
+			//check if that client has a message with the message id
+			client := allclients[blockFromTransactions.ClientHash]
+			if client.ClientMessages[blockFromTransactions.MessageId] {
+				//send ack back to the client
+				client.WaitForAckFromOrdering <- "ACK"
+				// delete the message from the map
+				delete(client.ClientMessages, blockFromTransactions.MessageId)
+			}
+		}
 	}
 }
 
@@ -92,14 +109,12 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 func setTransactionsInEnvironment(transacions []handleclient.TransactionContent, environment *handleclient.EnvStore) error {
 	for _, t := range transacions {
 		(*environment).Store[int32(t.Key)] = int32(t.NewVal)
-		// fmt.Printf("Ready to store: %+v\n", t)
 	}
-	// store all the transactions
+	// store all the new transactions
 	err := mustSaveState(environment)
 	if err != nil {
 		return err
 	}
-	// fmt.Printf("%v\n", environment.Store)
 	return nil
 }
 
@@ -111,77 +126,79 @@ func main() {
 		WasmStore:           wasmer.NewStore(eng),
 		Environment:         &handleclient.EnvStore{Store: make(map[int32]int32)},
 		AllClients:          make(map[string]*handleclient.Client),
+		Timeout:             time.Second * 5,
 	}
 	err := loadState(runtime.Environment)
 	if err != nil {
 		panic("Error getting the environment")
 	}
 
-	// // TO ORDERINGSERVICE
-	// attestURL := "http://localhost:8087"
-	// secureURL := "wss://localhost:443"
+	// TO ORDERINGSERVICE
+	attestURL := "http://localhost:8087"
+	secureURL := "wss://localhost:443"
 
-	// // create client keys
-	// privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	// pubKey := x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+	// create client keys
+	privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pubKey := x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
-	// // get server certificate over insecure channel
-	// serverCert := runtimelocalattestation.HttpGet(nil, attestURL+"/cert")
+	// get server certificate over insecure channel
+	serverCert := runtimelocalattestation.HttpGet(nil, attestURL+"/cert")
 
-	// // get the server's report targeted at this client
-	// clientInfoReport, err := enclave.GetLocalReport(nil, nil)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// serverReport := runtimelocalattestation.HttpGet(nil, attestURL+"/report", runtimelocalattestation.MakeArg("target", clientInfoReport))
+	// get the server's report targeted at this client
+	clientInfoReport, err := enclave.GetLocalReport(nil, nil)
+	if err != nil {
+		panic(err)
+	}
+	serverReport := runtimelocalattestation.HttpGet(nil, attestURL+"/report", runtimelocalattestation.MakeArg("target", clientInfoReport))
 
-	// // verify server certificate using the server's report
-	// if err := verifyreport.VerifyReport(serverReport, serverCert); err != nil {
-	// 	panic(err)
-	// }
+	// verify server certificate using the server's report
+	if err := verifyreport.VerifyReport(serverReport, serverCert); err != nil {
+		panic(err)
+	}
 
-	// // request a client certificate from the server
-	// pubKeyHash := sha256.Sum256(pubKey)
-	// clientReport, err := enclave.GetLocalReport(pubKeyHash[:], serverReport)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// clientCert := runtimelocalattestation.HttpGet(nil, attestURL+"/client", runtimelocalattestation.MakeArg("pubkey", pubKey), runtimelocalattestation.MakeArg("report", clientReport))
+	// request a client certificate from the server
+	pubKeyHash := sha256.Sum256(pubKey)
+	clientReport, err := enclave.GetLocalReport(pubKeyHash[:], serverReport)
+	if err != nil {
+		panic(err)
+	}
+	clientCert := runtimelocalattestation.HttpGet(nil, attestURL+"/client", runtimelocalattestation.MakeArg("pubkey", pubKey), runtimelocalattestation.MakeArg("report", clientReport))
 
-	// // create mutual TLS config
-	// tlsConfig := &tls.Config{
-	// 	Certificates: []tls.Certificate{
-	// 		{
-	// 			Certificate: [][]byte{clientCert},
-	// 			PrivateKey:  privKey,
-	// 		},
-	// 	},
-	// 	RootCAs: x509.NewCertPool(),
-	// }
-	// parsedServerCert, _ := x509.ParseCertificate(serverCert)
-	// tlsConfig.RootCAs.AddCert(parsedServerCert)
+	// create mutual TLS config
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{
+			{
+				Certificate: [][]byte{clientCert},
+				PrivateKey:  privKey,
+			},
+		},
+		RootCAs: x509.NewCertPool(),
+	}
+	parsedServerCert, _ := x509.ParseCertificate(serverCert)
+	tlsConfig.RootCAs.AddCert(parsedServerCert)
 
-	// // Set the tls config for the runtime
-	// tr := &http.Transport{
-	// 	TLSClientConfig: tlsConfig,
-	// }
+	// Set the tls config for the runtime
+	tr := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
 
-	// runtime.SecureRuntimeClient.Transport = tr
-	// runtime.SecureRuntimeClient.Timeout = time.Second * 10
+	runtime.SecureRuntimeClient.Transport = tr
+	runtime.SecureRuntimeClient.Timeout = time.Second * 10
 
-	// dialer := websocket.DefaultDialer
-	// dialer.TLSClientConfig = tlsConfig
+	dialer := websocket.DefaultDialer
+	dialer.TLSClientConfig = tlsConfig
 
-	// conn, _, err := websocket.DefaultDialer.Dial(secureURL+"/transaction", nil)
-	// if err != nil {
-	// 	panic("something wrong with websocket!")
-	// }
+	conn, _, err := websocket.DefaultDialer.Dial(secureURL+"/transaction", nil)
+	if err != nil {
+		fmt.Println(err)
+		panic("something wrong with websocket!")
+	}
 
-	// // set the connection for the runtime
-	// runtime.SocketConnectionToOrdering = conn
+	// set the connection for the runtime
+	runtime.SocketConnectionToOrdering = conn
 
-	// // create a go routine for waiting for messages from the orderingservice
-	// go WaitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment)
+	// create a go routine for waiting for messages from the orderingservice
+	go waitForOrderingMessages(runtime.SocketConnectionToOrdering, runtime.Environment, runtime.AllClients)
 
 	http.HandleFunc("/Init", runtime.InitHandler())
 	http.HandleFunc("/Add", runtime.SetHandler(setTransactionsInEnvironment, runtime.Environment))
@@ -218,8 +235,8 @@ func mustSaveState(env *handleclient.EnvStore) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile("./secret.store", encState, 0o600); err != nil {
-		return fmt.Errorf("Error: creating file responded with: %v", err)
+	if err := os.WriteFile("/data/secret.store", encState, 0o600); err != nil {
+		return fmt.Errorf("error: creating file responded with: %v", err)
 	}
 	return nil
 }

@@ -8,7 +8,7 @@
     "securityVersion": 3,
     "mounts": [
         {
-            "source": "/home/robin/Bachelor_Ego/orderingservice/files",
+            "source": "/home/robina/Bachelor_Ego/orderingservice/files",
             "target": "/files",
             "type": "hostfs",
             "readOnly": false
