@@ -101,7 +101,7 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 		fmt.Printf("%+v", blockFromTransactions)
 
 		if len(blockFromTransactions.TransactionContentSlice) != 0 {
-			fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
+			//fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
 			setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
 
 		} else {
@@ -110,11 +110,11 @@ func WaitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 		//check if the message with the client is registered in this runtime
 		if allclients[blockFromTransactions.ClientHash] != nil {
 			//check if that client has a message with the message id
-			fmt.Println("reached the clcient")
+			//fmt.Println("reached the clcient")
 			client := allclients[blockFromTransactions.ClientHash]
 			if client.ClientMessages[blockFromTransactions.MessageId] {
 				//send ack back to the client
-				fmt.Println("reached the message")
+				//fmt.Println("reached the message")
 				client.WaitForAckFromOrdering <- "ACK"
 			}
 		}
@@ -241,7 +241,7 @@ func main() {
 	}
 
 	// create TLS server for the vendors
-	server := http.Server{Addr: ":8086", TLSConfig: clienttlsConfig}
+	server := http.Server{Addr: ":8090", TLSConfig: clienttlsConfig}
 	err = server.ListenAndServeTLS("", "")
 	fmt.Println("Listening...")
 	if err != nil {

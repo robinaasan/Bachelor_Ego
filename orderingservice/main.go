@@ -25,7 +25,7 @@ import (
 const (
 	PATH      = "./files/blockFiles/"
 	genesis   = "000Block1.json"
-	blockSize = 5
+	blockSize = 20
 )
 
 type BlockTransactionStore struct {
@@ -182,7 +182,7 @@ func (bt *BlockTransactionStore) handlerTransaction(blockSize int, upgrader *web
 		// create the connected runtimeccclient
 		newClient := &runtimeclients.Runtimeclient{
 			Conn: conn,
-			Send: make(chan runtimeclients.SendBackToRuntime),
+			Send: make(chan runtimeclients.SendBackToRuntime, 1),
 		}
 		//Initialise the timer for evaluation
 		bt.runtime_clients = append(bt.runtime_clients, *newClient)
@@ -221,7 +221,7 @@ func (bt *BlockTransactionStore) waitForBlockFromTransactions(blockFromTransacti
 				//sendBackToAllRuntime.TransactionContentSlice = c.TransactionContentSlice
 
 				//send the block back to the last runtime
-				fmt.Println("Client was:", c.MessageId)
+				//fmt.Println("Client was:", c.MessageId)
 				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: c.TransactionContentSlice, ACK: false, MessageId: c.MessageId, ClientHash: c.ClientHash}, bt.runtime_clients, &bt.mu)
 			} else { //send only an ack to the runtime
 				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: []runtimeclients.TransactionContent{}, ACK: true, MessageId: c.MessageId, ClientHash: c.ClientHash}, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)

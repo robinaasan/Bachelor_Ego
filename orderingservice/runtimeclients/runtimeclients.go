@@ -45,10 +45,10 @@ type SendBackToRuntime struct {
 
 // goroutine to handle sending messages to a single client, this only sends the created blocks
 func (rc *Runtimeclient) WritePump() {
+	
 	for {
 		select {
 		case message := <-rc.Send:
-
 			dataToSendRuntime, err := json.Marshal(message)
 			if err != nil {
 				panic("Error marshalling data to send to runtime")
@@ -81,7 +81,7 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 			fmt.Println("Error reading from runtime", err)
 			continue
 		}
-		fmt.Printf("%+v", m)
+		//fmt.Printf("%+v", m)
 		// send the transaction
 		mu.Lock()
 		count++
@@ -104,8 +104,8 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 
 // send a message to all connected runtimez
 func BroadcastMessage(message *SendBackToRuntime, allruntimeclients []Runtimeclient, mu *sync.Mutex) {
-	mu.Lock()
-	defer mu.Unlock()
+	// mu.Lock()
+	// defer mu.Unlock()
 	for _, client := range allruntimeclients {
 		select {
 		case client.Send <- *message:

@@ -22,14 +22,14 @@ const (
 )
 
 const (
-	addEndPoint    = "https://localhost:8086/Add"
-	uploadEndPoint = "https://localhost:8086/Upload"
-	initEndPoint   = "https://localhost:8086/Init"
+	addEndPoint    = "https://localhost:8090/Add"
+	uploadEndPoint = "https://localhost:8090/Upload"
+	initEndPoint   = "https://localhost:8090/Init"
 )
 
 func main() {
 	fmt.Println(os.Getenv("uniqueid"))
-	uniqueID, _ := hex.DecodeString("7415a521ebf61e3cf3ff9b0243df5b00a356e0f52a3dc81de8bc11eebc299250")
+	uniqueID, _ := hex.DecodeString("8ef8ee741751bc4714b548fb69ab8bccbe95b1f3387800708032941adddfc728")
 
 	verifyReport := func(report attestation.Report) error {
 		if !bytes.Equal(report.UniqueID, uniqueID) {
