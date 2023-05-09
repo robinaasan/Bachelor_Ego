@@ -107,9 +107,7 @@ func (rc *Runtimeclient) ReadPump(blockSize int, allTransactions *[]TransactionC
 }
 
 // send a message to all connected runtimes
-func BroadcastMessage(message *SendBackToRuntime, allruntimeclients []Runtimeclient, mu *sync.Mutex) {
-	mu.Lock()
-	defer mu.Unlock()
+func BroadcastMessage(message *SendBackToRuntime, allruntimeclients []Runtimeclient) {
 	for _, client := range allruntimeclients {
 		select {
 		case client.Send <- *message:

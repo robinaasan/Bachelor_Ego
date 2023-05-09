@@ -212,9 +212,9 @@ func (bt *BlockTransactionStore) waitForBlockFromRuntimeTransactions(blockFromTr
 
 				//send the block to all connected runtimes
 				//fmt.Println("Client was:", c.ClientHash)
-				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: c.TransactionContentSlice, ACK: false, MessageId: c.MessageId, ClientHash: c.ClientHash}, bt.runtime_clients, &bt.mu)
+				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: c.TransactionContentSlice, ACK: false, MessageId: c.MessageId, ClientHash: c.ClientHash}, bt.runtime_clients)
 			} else { //send only an ack to the runtime
-				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: []runtimeclients.TransactionContent{}, ACK: true, MessageId: c.MessageId, ClientHash: c.ClientHash}, []runtimeclients.Runtimeclient{*c.Runtimeclient}, &bt.mu)
+				runtimeclients.BroadcastMessage(&runtimeclients.SendBackToRuntime{TransactionContentSlice: []runtimeclients.TransactionContent{}, ACK: true, MessageId: c.MessageId, ClientHash: c.ClientHash}, []runtimeclients.Runtimeclient{*c.Runtimeclient})
 			}
 		}
 	}
