@@ -1,10 +1,6 @@
 package main
 
 import (
-	"crypto"
-	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,18 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edgelesssys/ego/enclave"
 	"github.com/gorilla/websocket"
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/blockchain"
-	"github.com/robinaasan/Bachelor_Ego/orderingservice/orderinglocalattestation"
 	"github.com/robinaasan/Bachelor_Ego/orderingservice/runtimeclients"
-	"github.com/robinaasan/Bachelor_Ego/verifyreport"
 )
 
 const (
 	PATH      = "./files/blockFiles/"
 	genesis   = "000Block1.json"
-	blockSize = 5
+	blockSize = 20
 )
 
 type BlockTransactionStore struct {
@@ -59,10 +52,10 @@ func main() {
 		}
 	}
 	// create the server certificate and the servers
-	cert, privKey := orderinglocalattestation.CreateServerCertificate()
-	attestServer := newAttestServer(cert, privKey)
+	//cert, privKey := orderinglocalattestation.CreateServerCertificate()
+	//attestServer := newAttestServer(cert, privKey)
 
-	// create upgrader for websocket
+	// // create upgrader for websocket
 	var upgrader = &websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -75,15 +68,16 @@ func main() {
 	go blockTransactionStore.waitForBlockFromRuntimeTransactions(blockFromTransactions)
 
 	// create the secure server in the orderingservice
-	secureServer := newSecureServer(cert, privKey, blockTransactionStore, upgrader, blockFromTransactions)
+	secureServer := newSecureServer(blockTransactionStore, upgrader, blockFromTransactions)
 	// run the servers
-	go func() {
-		err := attestServer.ListenAndServe()
-		panic(err)
-	}()
+	// go func() {
+	// 	err := attestServer.ListenAndServe()
+	// 	panic(err)
+	// }()
 
 	fmt.Println("listening ...")
-	err := secureServer.ListenAndServeTLS("", "")
+	err := secureServer.ListenAndServeTLS("files/server.crt", "files/server.key")
+	//err := secureServer.ListenAndServe()
 
 	if err != nil {
 		fmt.Println("Error: ", err)
@@ -92,74 +86,74 @@ func main() {
 }
 
 // unsecure server
-func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
-	// create hash from the serverCertificate.
-	certHash := sha256.Sum256(cert)
-	mux := http.NewServeMux()
+// func newAttestServer(cert []byte, privKey crypto.PrivateKey) *http.Server {
+// 	//create hash from the serverCertificate.
+// 	certHash := sha256.Sum256(cert)
+// 	mux := http.NewServeMux()
 
-	// Returns the server certificate.
-	mux.HandleFunc("/cert", func(w http.ResponseWriter, r *http.Request) { w.Write(cert) })
+// 		// Returns the server certificate.
+// 	mux.HandleFunc("/cert", func(w http.ResponseWriter, r *http.Request) { w.Write(cert) })
 
-	// Returns a local report including the server certificate's hash for the given target report.
-	mux.HandleFunc("/report", func(w http.ResponseWriter, r *http.Request) {
-		targetReport := orderinglocalattestation.GetQueryArg(w, r, "target")
-		if targetReport == nil {
-			return
-		}
-		report, err := enclave.GetLocalReport(certHash[:], targetReport)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("GetLocalReport: %v", err), http.StatusInternalServerError)
-			return
-		}
-		w.Write(report)
-	})
-	// Returns a client certificate for the given pubkey.
-	// The given report ensures that only verified enclaves (runtimes) can get certificates for their pubkeys.
-	mux.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
-		pubKey := orderinglocalattestation.GetQueryArg(w, r, "pubkey")
-		if pubKey == nil {
-			return
-		}
-		report := orderinglocalattestation.GetQueryArg(w, r, "report")
-		if report == nil {
-			return
-		}
-		if err := verifyreport.VerifyReport(report, pubKey); err != nil {
-			http.Error(w, fmt.Sprintf("verifyReport: %v", err), http.StatusBadRequest)
-			return
-		}
-		w.Write(orderinglocalattestation.CreateClientCertificate(pubKey, cert, privKey))
-	})
+// 		// Returns a local report including the server certificate's hash for the given target report.
+// 		mux.HandleFunc("/report", func(w http.ResponseWriter, r *http.Request) {
+// 			targetReport := orderinglocalattestation.GetQueryArg(w, r, "target")
+// 			if targetReport == nil {
+// 				return
+// 			}
+// 			report, err := enclave.GetLocalReport(certHash[:], targetReport)
+// 			if err != nil {
+// 				http.Error(w, fmt.Sprintf("GetLocalReport: %v", err), http.StatusInternalServerError)
+// 				return
+// 			}
+// 			w.Write(report)
+// 		})
+// 		// Returns a client certificate for the given pubkey.
+// 		// The given report ensures that only verified enclaves (runtimes) can get certificates for their pubkeys.
+// 	mux.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
+// 		pubKey := orderinglocalattestation.GetQueryArg(w, r, "pubkey")
+// 		if pubKey == nil {
+// 			return
+// 		}
+// 		report := orderinglocalattestation.GetQueryArg(w, r, "report")
+// 		if report == nil {
+// 			return
+// 		}
+// 		if err := verifyreport.VerifyReport(report, pubKey); err != nil {
+// 			http.Error(w, fmt.Sprintf("verifyReport: %v", err), http.StatusBadRequest)
+// 			return
+// 		}
+// 		w.Write(orderinglocalattestation.CreateClientCertificate(pubKey, cert, privKey))
+// 	})
 
-	return &http.Server{
-		Addr:    "localhost:8087",
-		Handler: mux,
-	}
-}
+// 	return &http.Server{
+// 		Addr:    "localhost:8087",
+// 		Handler: mux,
+// 	}
+// }
 
 // create the secure server
-func newSecureServer(cert []byte, privKey crypto.PrivateKey, bt *BlockTransactionStore, upgrader *websocket.Upgrader, blockFromTransactions chan runtimeclients.BlockFromTransactions) *http.Server {
+func newSecureServer(bt *BlockTransactionStore, upgrader *websocket.Upgrader, blockFromTransactions chan runtimeclients.BlockFromTransactions) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/transaction", bt.handlerTransaction(blockSize, upgrader, blockFromTransactions))
 
 	// use server certificate also as client CA
-	parsedCert, _ := x509.ParseCertificate(cert)
-	clientCAs := x509.NewCertPool()
-	clientCAs.AddCert(parsedCert)
+	// parsedCert, _ := x509.ParseCertificate(cert)
+	// clientCAs := x509.NewCertPool()
+	// clientCAs.AddCert(parsedCert)
 
 	return &http.Server{
 		Addr:    "localhost:443",
 		Handler: mux,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{
-				{
-					Certificate: [][]byte{cert},
-					PrivateKey:  privKey,
-				},
-			},
-			ClientAuth: tls.RequireAndVerifyClientCert,
-			ClientCAs:  clientCAs,
-		},
+		// TLSConfig: &tls.Config{
+		// 	Certificates: []tls.Certificate{
+		// 		{
+		// 			Certificate: [][]byte{cert},
+		// 			PrivateKey:  privKey,
+		// 		},
+		// 	},
+		// 	ClientAuth: tls.RequireAndVerifyClientCert,
+		// 	ClientCAs:  clientCAs,
+		// },
 	}
 }
 

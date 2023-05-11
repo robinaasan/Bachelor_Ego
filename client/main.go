@@ -7,18 +7,13 @@ package main
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
-
-	"github.com/edgelesssys/ego/attestation"
-	"github.com/edgelesssys/ego/eclient"
 )
 
 const (
@@ -29,24 +24,25 @@ const (
 )
 
 const (
-	setEndPoint    = "https://localhost:8086/Add"
-	uploadEndPoint = "https://localhost:8086/Upload"
-	initEndPoint   = "https://localhost:8086/Init"
+	setEndPoint    = "http://localhost:8086/Add"
+	uploadEndPoint = "http://localhost:8086/Upload"
+	initEndPoint   = "http://localhost:8086/Init"
 )
 
 func main() {
-	fmt.Println(os.Getenv("uniqueid"))
-	uniqueID, _ := hex.DecodeString("d82cd4fce92b92a9b702b71d061898ba77dc9e506d6a61ea9d9705e892ee2f80")
+	// fmt.Println(os.Getenv("uniqueid"))
+	// uniqueID, _ := hex.DecodeString("d82cd4fce92b92a9b702b71d061898ba77dc9e506d6a61ea9d9705e892ee2f80")
 
-	verifyReport := func(report attestation.Report) error {
-		if !bytes.Equal(report.UniqueID, uniqueID) {
-			return errors.New("invalid UniqueID")
-		}
-		return nil
-	}
-	tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport) // create TLS config that verifies report from the runtime
-	client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
-	err := runTerminalCommands(&client)
+	// verifyReport := func(report attestation.Report) error {
+	// 	if !bytes.Equal(report.UniqueID, uniqueID) {
+	// 		return errors.New("invalid UniqueID")
+	// 	}
+	// 	return nil
+	// }
+	//tlsConfig := eclient.CreateAttestationClientTLSConfig(verifyReport) // create TLS config that verifies report from the runtime
+	//client := http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}}
+	client := &http.Client{}
+	err := runTerminalCommands(client)
 	if err != nil {
 		fmt.Println(err)
 	}

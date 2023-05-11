@@ -2,11 +2,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -16,11 +12,8 @@ import (
 	"time"
 
 	"github.com/edgelesssys/ego/ecrypto"
-	"github.com/edgelesssys/ego/enclave"
 	"github.com/gorilla/websocket"
 	"github.com/robinaasan/Bachelor_Ego/runtime/handleclient"
-	"github.com/robinaasan/Bachelor_Ego/runtime/runtimelocalattestation"
-	"github.com/robinaasan/Bachelor_Ego/verifyreport"
 	wasmer "github.com/wasmerio/wasmer-go/wasmer"
 	//"github.com/edgelesssys/ego/enclave"
 )
@@ -96,9 +89,10 @@ func waitForOrderingMessages(conn *websocket.Conn, environment *handleclient.Env
 		if len(blockFromTransactions.TransactionContentSlice) != 0 && !blockFromTransactions.ACK {
 			//fmt.Printf("Block was created: \n%v", blockFromTransactions.TransactionContentSlice)
 			setTransactionsInEnvironment(blockFromTransactions.TransactionContentSlice, environment)
-		} else {
-			fmt.Println("Recieved an Ack from ordering")
 		}
+		//else {
+		// 	fmt.Println("Recieved an Ack from ordering")
+		// }
 		//check if the message with the client is registered in this runtime
 		if allclients[blockFromTransactions.ClientHash] != nil {
 			//check if that client has a message with the message id
@@ -142,56 +136,58 @@ func main() {
 	}
 
 	// TO ORDERINGSERVICE
-	attestURL := "http://localhost:8087"
+	// attestURL := "http://localhost:8087"
 	secureURL := "wss://localhost:443"
 
 	// create client keys
-	privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-	pubKey := x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+	// privKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	// pubKey := x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
-	// get server certificate over insecure channel
-	serverCert := runtimelocalattestation.HttpGet(nil, attestURL+"/cert")
+	// // get server certificate over insecure channel
+	//serverCert := runtimelocalattestation.HttpGet(nil, attestURL+"/cert")
 
-	// get the server's report targeted at this client
-	clientInfoReport, err := enclave.GetLocalReport(nil, nil)
-	if err != nil {
-		panic(err)
-	}
-	serverReport := runtimelocalattestation.HttpGet(nil, attestURL+"/report", runtimelocalattestation.MakeArg("target", clientInfoReport))
+	// // get the server's report targeted at this client
+	// clientInfoReport, err := enclave.GetLocalReport(nil, nil)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// serverReport := runtimelocalattestation.HttpGet(nil, attestURL+"/report", runtimelocalattestation.MakeArg("target", clientInfoReport))
 
-	// verify server certificate using the server's report
-	if err := verifyreport.VerifyReport(serverReport, serverCert); err != nil {
-		panic(err)
-	}
+	// // verify server certificate using the server's report
+	// if err := verifyreport.VerifyReport(serverReport, serverCert); err != nil {
+	// 	panic(err)
+	// }
 
-	// request a client certificate from the server
-	pubKeyHash := sha256.Sum256(pubKey)
-	clientReport, err := enclave.GetLocalReport(pubKeyHash[:], serverReport)
-	if err != nil {
-		panic(err)
-	}
-	clientCert := runtimelocalattestation.HttpGet(nil, attestURL+"/client", runtimelocalattestation.MakeArg("pubkey", pubKey), runtimelocalattestation.MakeArg("report", clientReport))
+	// // request a client certificate from the server
+	// pubKeyHash := sha256.Sum256(pubKey)
+	// clientReport, err := enclave.GetLocalReport(pubKeyHash[:], serverReport)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// clientCert := runtimelocalattestation.HttpGet(nil, attestURL+"/client", runtimelocalattestation.MakeArg("pubkey", pubKey), runtimelocalattestation.MakeArg("report", clientReport))
 
-	// create mutual TLS config
+	// // create mutual TLS config
 	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{
-			{
-				Certificate: [][]byte{clientCert},
-				PrivateKey:  privKey,
-			},
-		},
-		RootCAs: x509.NewCertPool(),
+		// Certificates: []tls.Certificate{
+		// 	{
+		// 		Certificate: [][]byte{clientCert},
+		// 		PrivateKey:  privKey,
+		// 	},
+		// },
+		// RootCAs: x509.NewCertPool(),
+		InsecureSkipVerify: true,
 	}
-	parsedServerCert, _ := x509.ParseCertificate(serverCert)
-	tlsConfig.RootCAs.AddCert(parsedServerCert)
+	// parsedServerCert, _ := x509.ParseCertificate(serverCert)
+	// tlsConfig.RootCAs.AddCert(parsedServerCert)
 
-	// Set the tls config for the runtime
-	tr := &http.Transport{
-		TLSClientConfig: tlsConfig,
-	}
+	// // Set the tls config for the runtime
 
-	runtime.SecureRuntimeClient.Transport = tr
-	runtime.SecureRuntimeClient.Timeout = time.Second * 10
+	// tr := &http.Transport{
+	// 	TLSClientConfig: tlsConfig,
+	// }
+
+	// runtime.SecureRuntimeClient.Transport = tr
+	// runtime.SecureRuntimeClient.Timeout = time.Second * 10
 
 	dialer := websocket.DefaultDialer
 	dialer.TLSClientConfig = tlsConfig
@@ -213,14 +209,17 @@ func main() {
 	http.HandleFunc("/Upload", runtime.UploadHandler())
 
 	// The function embeds ego-certificate on its own
-	clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// clienttlsConfig, err := enclave.CreateAttestationServerTLSConfig()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	// create TLS server for the vendors
-	server := http.Server{Addr: ":8086", TLSConfig: clienttlsConfig}
-	err = server.ListenAndServeTLS("", "")
+	// server := http.Server{Addr: ":8086", TLSConfig: clienttlsConfig}
+	server := http.Server{Addr: ":8086"}
+
+	// err = server.ListenAndServeTLS("", "")
+	err = server.ListenAndServe()
 	fmt.Println("Listening...")
 	if err != nil {
 		fmt.Println("Error here!", err)
