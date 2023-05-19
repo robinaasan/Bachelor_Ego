@@ -14,5 +14,6 @@ ego sign runtime
 # uniqueid=$(ego uniqueid runtime)
 # export UNIQUEID=$uniqueid 
 ego uniqueid runtime
-cd ..
+sudo ego run runtime
+
 exec bash
